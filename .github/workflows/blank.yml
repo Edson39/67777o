@@ -14,7 +14,7 @@ jobs:
     - name: Conectar ao Tailscale
       shell: powershell
       run: |
-        & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="${{ secrets.TS_AUTHKEY }}" --accept-routes
+        Start-Process -FilePath "C:\Program Files\Tailscale\tailscale.exe" -ArgumentList "up --authkey='${{ secrets.TS_AUTHKEY }}' --accept-routes" -Wait -NoNewWindow
 
     - name: Mostrar IP do Tailscale
       shell: powershell
