@@ -1,0 +1,41 @@
+name: Windows + Tailscale Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Instalar Tailscale
+        shell: powershell
+        run: |
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe"
+          Invoke-WebRequest $url -OutFile "$env:TEMP\tailscale.exe"
+          Start-Process "$env:TEMP\tailscale.exe" -ArgumentList "/quiet" -Wait
+
+      - name: Conectar ao Tailscale
+        shell: powershell
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$env:TS_AUTHKEY"
+
+      - name: Mostrar IP do Tailscale
+        shell: powershell
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+
+      - name: Testar Windows
+        shell: powershell
+        run: |
+          Write-Host "Windows runner conectado ao Tailscale."
+          Get-CimInstance Win32_OperatingSystem |
+            Select-Object Caption, Version, OSArchitecture
+
+      - name: Desconectar
+        if: always()
+        shell: powershell
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" down
