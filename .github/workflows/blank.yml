@@ -34,8 +34,6 @@ jobs:
           Get-CimInstance Win32_OperatingSystem |
             Select-Object Caption, Version, OSArchitecture
 
-      - name: Desconectar
-        if: always()
-        shell: powershell
-        run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" down
+      - name: Manter ligado
+  shell: powershell
+  run: Start-Sleep -Seconds 21600
