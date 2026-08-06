@@ -1,4 +1,4 @@
-Name: Windows AnyDesk & Tailscale Runner
+name: Windows AnyDesk & Tailscale Runner
 
 on:
   workflow_dispatch:
@@ -17,26 +17,33 @@ jobs:
         authkey: ${{ secrets.TS_AUTHKEY }}
         args: --accept-routes
 
-    - name: Instalar e Iniciar AnyDesk
+    - name: Instalar e Configurar AnyDesk
       shell: powershell
       run: |
-        Write-Host "Baixando o AnyDesk..."
+        Write-Host "Baixando AnyDesk..."
         Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
         
-        Write-Host "Instalando o AnyDesk..."
-        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"$env:ProgramFiles\AnyDesk`" --silent --create-desktop-icon" -Wait
+        Write-Host "Instalando o serviço do AnyDesk..."
+        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"C:\Program Files (x86)\AnyDesk`" --silent --create-desktop-icon" -Wait
         
-        Write-Host "Definindo senha de acesso nao supervisionado..."
-        "SuaSenhaForte123!" | & "$env:ProgramFiles\AnyDesk\AnyDesk.exe" --set-password
+        Start-Sleep -Seconds 3
         
-        Write-Host "Iniciando o serviço do AnyDesk..."
-        Start-Service -Name "AnyDesk" -ErrorAction SilentlyContinue
-        Start-Process -FilePath "$env:ProgramFiles\AnyDesk\AnyDesk.exe"
+        Write-Host "Configurando senha de acesso não supervisionado..."
+        $anydesk = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
         
-        Start-Sleep -Seconds 5
-        Write-Host "AnyDesk instalado e configurado com sucesso!"
+        # Define a senha para acesso remoto direto
+        "SuaSenhaForte123!" | & $anydesk --set-password
+        
+        # Reinicia o serviço para aplicar a senha
+        Restart-Service -Name "AnyDesk" -Force -ErrorAction SilentlyContinue
+        
+        # Pega e exibe o ID nativo do AnyDesk nos logs por garantia
+        Write-Host "----------------------------------------------"
+        $anydeskId = & $anydesk --get-id
+        Write-Host "ID do AnyDesk: $anydeskId"
+        Write-Host "----------------------------------------------"
 
-    - name: Definir senha do Administrador e RDP
+    - name: Configurar Senha do Windows e RDP
       shell: powershell
       run: |
         $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
@@ -47,16 +54,11 @@ jobs:
     - name: Mostrar IP do Tailscale
       shell: powershell
       run: |
+        Write-Host "IP do Tailscale para conexão RDP ou AnyDesk:"
         tailscale ip -4
 
-    - name: Testar Windows
+    - name: Manter Runner Ativo
       shell: powershell
       run: |
-        Write-Host "Windows runner pronto com AnyDesk e Tailscale."
-        Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture
-
-    - name: Manter ligado
-      shell: powershell
-      run: |
-        Write-Host "Runner mantido ativo."
+        Write-Host "Máquina online! Conecte via AnyDesk ou RDP usando o IP ou ID acima."
         Start-Sleep -Seconds 21600
