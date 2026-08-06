@@ -1,39 +1,34 @@
-name: Windows + Tailscale Test
+name: Windows Tailscale Runner
 
 on:
   workflow_dispatch:
 
 jobs:
-  windows:
+  build:
     runs-on: windows-latest
-
+    
     steps:
-      - name: Instalar Tailscale
-        shell: powershell
-        run: |
-          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe"
-          Invoke-WebRequest $url -OutFile "$env:TEMP\tailscale.exe"
-          Start-Process "$env:TEMP\tailscale.exe" -ArgumentList "/quiet" -Wait
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Conectar ao Tailscale
-        shell: powershell
-        env:
-          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
-        run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$env:TS_AUTHKEY"
+    - name: Conectar ao Tailscale
+      shell: powershell
+      run: |
+        & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="${{ secrets.TS_AUTHKEY }}" --accept-routes
 
-      - name: Mostrar IP do Tailscale
-        shell: powershell
-        run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+    - name: Mostrar IP do Tailscale
+      shell: powershell
+      run: |
+        & "C:\Program Files\Tailscale\tailscale.exe" ip -4
 
-      - name: Testar Windows
-        shell: powershell
-        run: |
-          Write-Host "Windows runner conectado ao Tailscale."
-          Get-CimInstance Win32_OperatingSystem |
-            Select-Object Caption, Version, OSArchitecture
+    - name: Testar Windows
+      shell: powershell
+      run: |
+        Write-Host "Windows runner conectado ao Tailscale."
+        Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture
 
-       - name: Manter ligado
-        shell: powershell
-        run: Start-Sleep -Seconds 21600
+    - name: Manter ligado
+      shell: powershell
+      run: |
+        Write-Host "Runner mantido ativo."
+        Start-Sleep -Seconds 21600
