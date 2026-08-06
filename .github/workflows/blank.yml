@@ -1,4 +1,4 @@
-name: Windows Game Streaming Runner
+name: Windows AnyDesk & Tailscale Runner
 
 on:
   workflow_dispatch:
@@ -11,25 +11,28 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # 1. LIBERAR ESPAÇO NO DISCO RIGIDO
-    - name: Liberar Espaco em Disco
-      shell: powershell
-      run: |
-        Write-Host "Limpando caches do sistema para liberar espaço..."
-        Remove-Item -Recurse -Force "C:\Program Files\dotnet" -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force "C:\Android" -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force "C:\hostedtoolcache" -ErrorAction SilentlyContinue
-        Write-Host "Limpeza concluida!"
-
-    # 2. CONECTAR À REDE TAILSCALE
     - name: Conectar ao Tailscale
       uses: tailscale/github-action@v3
       with:
         authkey: ${{ secrets.TS_AUTHKEY }}
         args: --accept-routes
 
-    # 3. INSTALAR JOGOS, PROGRAMAS E SUNSHINE (MOONLIGHT)
-    - name: Instalar Jogos, Programas e Sunshine
+    - name: Instalar e Configurar AnyDesk
+      shell: powershell
+      run: |
+        Write-Host "Baixando AnyDesk..."
+        Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
+        
+        Write-Host "Instalando AnyDesk..."
+        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"C:\Program Files (x86)\AnyDesk`" --silent" -Wait
+        
+        Write-Host "Configurando Acesso Nao Supervisionado..."
+        cmd.exe /c "echo SuaSenhaForte123! | `"C:\Program Files (x86)\AnyDesk\AnyDesk.exe`" --set-password"
+        
+        Restart-Service -Name "AnyDesk" -Force
+        Start-Sleep -Seconds 10
+
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -40,22 +43,14 @@ jobs:
         Write-Host "Instalando Steam..."
         winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalando Roblox..."
+        Write-Host "Instalando Roblox Player..."
         winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
 
         Write-Host "Instalando Bloxstrap..."
         winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalando Sunshine Stream Server (para Moonlight)..."
-        winget install --id LizardByte.Sunshine --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Iniciando o servico do Sunshine..."
-        Start-Process -FilePath "C:\Program Files\Sunshine\sunshine.exe" -ArgumentList "--service install" -Wait
-        Start-Service -Name "sunshine" -ErrorAction SilentlyContinue
-
         Write-Host "Instalações concluídas!"
 
-    # 4. CONFIGURAR SENHA DO WINDOWS E RDP DE BACKUP
     - name: Configurar Senha do Windows e RDP
       shell: powershell
       run: |
@@ -64,16 +59,8 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-    # 5. MANTER A MÁQUINA LIGADA
     - name: Manter Runner Ativo
       shell: powershell
       run: |
-        $ip = tailscale ip -4
-        Write-Host "--------------------------------------------------------"
-        Write-Host "MAQUINA PRONTA PARA O CLIENTE!"
-        Write-Host "IP do Tailscale: $ip"
-        Write-Host "Instrucao para o Cliente:"
-        Write-Host "1. Conectar no Tailscale"
-        Write-Host "2. Abrir o Moonlight e adicionar o IP: $ip"
-        Write-Host "--------------------------------------------------------"
+        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
         Start-Sleep -Seconds 21600
