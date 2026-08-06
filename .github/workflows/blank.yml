@@ -23,24 +23,33 @@ jobs:
         Write-Host "Baixando AnyDesk..."
         Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
         
-        Write-Host "Instalando..."
+        Write-Host "Instalando AnyDesk..."
         Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"C:\Program Files (x86)\AnyDesk`" --silent" -Wait
         
-        Write-Host "Configurando Acesso Não Supervisionado..."
-        # Forçamos a senha usando cmd para garantir o pipe correto
+        Write-Host "Configurando Acesso Nao Supervisionado..."
         cmd.exe /c "echo SuaSenhaForte123! | `"C:\Program Files (x86)\AnyDesk\AnyDesk.exe`" --set-password"
         
-        Write-Host "Reiniciando serviço..."
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
-        
-        $anydesk = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
-        $id = & $anydesk --get-id
-        Write-Host "----------------------------------------------"
-        Write-Host "ID do AnyDesk: $id"
-        Write-Host "----------------------------------------------"
 
-    - name: Configurar Acesso Remoto (RDP)
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
+      shell: powershell
+      run: |
+        Write-Host "Instalando Discord..."
+        winget install --id Discord.Discord --silent --accept-source-agreements --accept-package-agreements
+        
+        Write-Host "Instalando Steam..."
+        winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
+        
+        Write-Host "Instalando Roblox Player..."
+        winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
+        
+        Write-Host "Instalando Bloxstrap (Launcher otimizado do Roblox)..."
+        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements || true
+        
+        Write-Host "Todos os programas foram instalados com sucesso!"
+
+    - name: Configurar Senha do Windows e RDP
       shell: powershell
       run: |
         $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
@@ -48,14 +57,8 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-    - name: Mostrar Dados de Acesso
-      shell: powershell
-      run: |
-        Write-Host "IP do Tailscale: $(tailscale ip -4)"
-        Write-Host "Se o ID do AnyDesk aparecer acima, use-o com a senha: SuaSenhaForte123!"
-        Write-Host "Se não, use o IP do Tailscale via RDP (RD Client)."
-
     - name: Manter Runner Ativo
       shell: powershell
       run: |
+        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
         Start-Sleep -Seconds 21600
