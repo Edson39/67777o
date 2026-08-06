@@ -17,6 +17,16 @@ jobs:
         authkey: ${{ secrets.TS_AUTHKEY }}
         args: --accept-routes
 
+    - name: Definir senha do Administrador
+      shell: powershell
+      run: |
+        # Define a senha para o usuário administrador padrão
+        $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
+        Set-LocalUser -Name "runneradmin" -Password $password
+        # Habilita o RDP (Área de Trabalho Remota)
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
     - name: Mostrar IP do Tailscale
       shell: powershell
       run: |
