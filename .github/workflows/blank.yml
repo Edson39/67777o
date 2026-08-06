@@ -35,19 +35,21 @@ jobs:
     - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
       shell: powershell
       run: |
+        $ErrorActionPreference = 'SilentlyContinue'
+
         Write-Host "Instalando Discord..."
         winget install --id Discord.Discord --silent --accept-source-agreements --accept-package-agreements
-        
+
         Write-Host "Instalando Steam..."
         winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
-        
+
         Write-Host "Instalando Roblox Player..."
         winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
-        
-        Write-Host "Instalando Bloxstrap (Launcher otimizado do Roblox)..."
-        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements || true
-        
-        Write-Host "Todos os programas foram instalados com sucesso!"
+
+        Write-Host "Instalando Bloxstrap..."
+        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
+
+        Write-Host "Instalações concluídas!"
 
     - name: Configurar Senha do Windows e RDP
       shell: powershell
