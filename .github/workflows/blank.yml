@@ -34,6 +34,6 @@ jobs:
           Get-CimInstance Win32_OperatingSystem |
             Select-Object Caption, Version, OSArchitecture
 
-      - name: Manter ligado
-  shell: powershell
-  run: Start-Sleep -Seconds 21600
+       - name: Manter ligado
+        shell: powershell
+        run: Start-Sleep -Seconds 21600
