@@ -1,4 +1,4 @@
-name: Windows Tailscale Runner
+name: Windows AnyDesk & Tailscale Runner
 
 on:
   workflow_dispatch:
@@ -17,13 +17,26 @@ jobs:
         authkey: ${{ secrets.TS_AUTHKEY }}
         args: --accept-routes
 
-    - name: Definir senha do Administrador
+    - name: Instalar e Iniciar AnyDesk
       shell: powershell
       run: |
-        # Define a senha para o usuário administrador padrão
+        Write-Host "Baixando o AnyDesk..."
+        Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
+        
+        Write-Host "Instalando o AnyDesk..."
+        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"$env:ProgramFiles\AnyDesk`" --silent --create-desktop-icon" -Wait
+        
+        Write-Host "Iniciando o AnyDesk..."
+        Start-Process -FilePath "$env:ProgramFiles\AnyDesk\AnyDesk.exe"
+        
+        Start-Sleep -Seconds 5
+        Write-Host "AnyDesk instalado e aberto com sucesso!"
+
+    - name: Definir senha do Administrador e RDP
+      shell: powershell
+      run: |
         $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $password
-        # Habilita o RDP (Área de Trabalho Remota)
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
@@ -35,7 +48,7 @@ jobs:
     - name: Testar Windows
       shell: powershell
       run: |
-        Write-Host "Windows runner conectado ao Tailscale."
+        Write-Host "Windows runner pronto com AnyDesk e Tailscale."
         Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture
 
     - name: Manter ligado
