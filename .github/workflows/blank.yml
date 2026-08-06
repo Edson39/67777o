@@ -12,14 +12,15 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Conectar ao Tailscale
-      shell: powershell
-      run: |
-        Start-Process -FilePath "C:\Program Files\Tailscale\tailscale.exe" -ArgumentList "up --authkey='${{ secrets.TS_AUTHKEY }}' --accept-routes" -Wait -NoNewWindow
+      uses: tailscale/github-action@v3
+      with:
+        authkey: ${{ secrets.TS_AUTHKEY }}
+        args: --accept-routes
 
     - name: Mostrar IP do Tailscale
       shell: powershell
       run: |
-        & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+        tailscale ip -4
 
     - name: Testar Windows
       shell: powershell
