@@ -1,4 +1,4 @@
-name: Windows AnyDesk & Tailscale Runner
+Name: Windows AnyDesk & Tailscale Runner
 
 on:
   workflow_dispatch:
@@ -26,11 +26,15 @@ jobs:
         Write-Host "Instalando o AnyDesk..."
         Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"$env:ProgramFiles\AnyDesk`" --silent --create-desktop-icon" -Wait
         
-        Write-Host "Iniciando o AnyDesk..."
+        Write-Host "Definindo senha de acesso nao supervisionado..."
+        "SuaSenhaForte123!" | & "$env:ProgramFiles\AnyDesk\AnyDesk.exe" --set-password
+        
+        Write-Host "Iniciando o serviço do AnyDesk..."
+        Start-Service -Name "AnyDesk" -ErrorAction SilentlyContinue
         Start-Process -FilePath "$env:ProgramFiles\AnyDesk\AnyDesk.exe"
         
         Start-Sleep -Seconds 5
-        Write-Host "AnyDesk instalado e aberto com sucesso!"
+        Write-Host "AnyDesk instalado e configurado com sucesso!"
 
     - name: Definir senha do Administrador e RDP
       shell: powershell
