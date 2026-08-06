@@ -23,27 +23,24 @@ jobs:
         Write-Host "Baixando AnyDesk..."
         Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
         
-        Write-Host "Instalando o serviço do AnyDesk..."
-        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"C:\Program Files (x86)\AnyDesk`" --silent --create-desktop-icon" -Wait
+        Write-Host "Instalando..."
+        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"C:\Program Files (x86)\AnyDesk`" --silent" -Wait
         
-        Start-Sleep -Seconds 3
+        Write-Host "Configurando Acesso Não Supervisionado..."
+        # Forçamos a senha usando cmd para garantir o pipe correto
+        cmd.exe /c "echo SuaSenhaForte123! | `"C:\Program Files (x86)\AnyDesk\AnyDesk.exe`" --set-password"
         
-        Write-Host "Configurando senha de acesso não supervisionado..."
+        Write-Host "Reiniciando serviço..."
+        Restart-Service -Name "AnyDesk" -Force
+        Start-Sleep -Seconds 10
+        
         $anydesk = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
-        
-        # Define a senha para acesso remoto direto
-        "SuaSenhaForte123!" | & $anydesk --set-password
-        
-        # Reinicia o serviço para aplicar a senha
-        Restart-Service -Name "AnyDesk" -Force -ErrorAction SilentlyContinue
-        
-        # Pega e exibe o ID nativo do AnyDesk nos logs por garantia
+        $id = & $anydesk --get-id
         Write-Host "----------------------------------------------"
-        $anydeskId = & $anydesk --get-id
-        Write-Host "ID do AnyDesk: $anydeskId"
+        Write-Host "ID do AnyDesk: $id"
         Write-Host "----------------------------------------------"
 
-    - name: Configurar Senha do Windows e RDP
+    - name: Configurar Acesso Remoto (RDP)
       shell: powershell
       run: |
         $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
@@ -51,14 +48,14 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-    - name: Mostrar IP do Tailscale
+    - name: Mostrar Dados de Acesso
       shell: powershell
       run: |
-        Write-Host "IP do Tailscale para conexão RDP ou AnyDesk:"
-        tailscale ip -4
+        Write-Host "IP do Tailscale: $(tailscale ip -4)"
+        Write-Host "Se o ID do AnyDesk aparecer acima, use-o com a senha: SuaSenhaForte123!"
+        Write-Host "Se não, use o IP do Tailscale via RDP (RD Client)."
 
     - name: Manter Runner Ativo
       shell: powershell
       run: |
-        Write-Host "Máquina online! Conecte via AnyDesk ou RDP usando o IP ou ID acima."
         Start-Sleep -Seconds 21600
