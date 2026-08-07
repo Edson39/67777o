@@ -32,7 +32,21 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
+    - name: Instalar Sunshine
+      shell: powershell
+      run: |
+        $ErrorActionPreference = 'SilentlyContinue'
+        Write-Host "Instalando Sunshine..."
+        winget install --id LizardByte.Sunshine --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
+
+        Write-Host "Configurando credenciais do Sunshine..."
+        cmd.exe /c "C:\Program Files\LizardByte\Sunshine\sunshine.exe --creds admin 12345678"
+
+        Write-Host "Liberando portas no Firewall..."
+        New-NetFirewallRule -DisplayName "Sunshine-TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 47984,47989,47990,48010
+        New-NetFirewallRule -DisplayName "Sunshine-UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 47998,47999,48000,48002,48010
+
+    - name: Instalar Jogos e Aplicativos
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -49,15 +63,32 @@ jobs:
         Write-Host "Instalando Bloxstrap..."
         winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalações concluídas!"
+        Write-Host "Instalacoes concluidas!"
 
-    - name: Configurar Senha do Windows e RDP
+    - name: Configurar Autologin e Desativar Tela de Bloqueio
       shell: powershell
       run: |
-        $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
+        $passwordText = "SuaSenhaForte123!"
+        $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $password
+
+        # Ativa RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+        # Configura Autologin sem Ctrl+Alt+Del
+        $logonPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+        Set-ItemProperty -Path $logonPath -Name "AutoAdminLogon" -Value "1"
+        Set-ItemProperty -Path $logonPath -Name "DefaultUserName" -Value "runneradmin"
+        Set-ItemProperty -Path $logonPath -Name "DefaultPassword" -Value $passwordText
+        Set-ItemProperty -Path $logonPath -Name "DisableCAD" -Value 1
+
+        # Desativa protecao de tela e repouso
+        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Control Panel\Desktop' -Name "ScreenSaveActive" -Value "0"
+        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51' -Name "ACSettingIndex" -Value 0
+
+        # Agenda o Sunshine para rodar na sessao do usuario
+        schtasks /create /tn "SunshineStartup" /tr "C:\Program Files\LizardByte\Sunshine\sunshine.exe" /sc onlogon /ru runneradmin /f
 
     - name: Configurar Papel de Parede
       shell: powershell
@@ -69,11 +100,11 @@ jobs:
         
         Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }'
         [W]::SystemParametersInfo(0x0014, 0, $imgPath, 0x01 -bor 0x02)
-        
-        Write-Host "Papel de parede configurado com sucesso!"
 
-    - name: Manter Runner Ativo
+    - name: Iniciar Sunshine e Manter Runner Ativo
       shell: powershell
       run: |
-        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
+        Write-Host "Iniciando Sunshine no Desktop..."
+        Start-Process -FilePath "C:\Program Files\LizardByte\Sunshine\sunshine.exe" -WindowStyle Hidden
+        Write-Host "Tudo pronto! O Windows esta liberado para acesso direto pelo Moonlight."
         Start-Sleep -Seconds 21600
