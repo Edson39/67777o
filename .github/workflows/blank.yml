@@ -62,19 +62,15 @@ jobs:
     - name: Configurar Papel de Parede
       shell: powershell
       run: |
-        if (Test-Path ".\e54ff1cc376b23c96a3d27edaadbc1fc.jpg") {
-            $ImgPath = Resolve-Path ".\e54ff1cc376b23c96a3d27edaadbc1fc.jpg"
-            Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $ImgPath.Path
-            Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value "10"
-            Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value "0"
-            
-            # Baixa utilitário leve para aplicar o wallpaper imediatamente sem erro de sintaxe
-            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/sven5/set-wallpaper/master/set-wallpaper.exe" -OutFile "$env:TEMP\set-wallpaper.exe"
-            Start-Process -FilePath "$env:TEMP\set-wallpaper.exe" -ArgumentList "`"$($ImgPath.Path)`"" -Wait
-            Write-Host "Papel de parede configurado!"
-        } else {
-            Write-Host "Imagem não encontrada!"
-        }
+        $imgPath = (Get-Item ".\e54ff1cc376b23c96a3d27edaadbc1fc.jpg").FullName
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $imgPath
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value "10"
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value "0"
+        
+        Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }'
+        [W]::SystemParametersInfo(0x0014, 0, $imgPath, 0x01 -bor 0x02)
+        
+        Write-Host "Papel de parede configurado com sucesso!"
 
     - name: Manter Runner Ativo
       shell: powershell
