@@ -32,7 +32,12 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
+    - name: Instalar Ferramentas de Compactação (7-Zip)
+      shell: powershell
+      run: |
+        winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements
+
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox, FiveM)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -49,7 +54,31 @@ jobs:
         Write-Host "Instalando Bloxstrap..."
         winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalações concluídas!"
+        Write-Host "Instalando FiveM..."
+        winget install --id CitizenFX.FiveM --silent --accept-source-agreements --accept-package-agreements
+
+        Write-Host "Instalações de apps concluídas!"
+
+    - name: Baixar e Extrair GTA V Lite
+      shell: powershell
+      run: |
+        # Substitua a URL abaixo pelo link direto do seu arquivo (.zip, .rar ou .7z)
+        $gtaUrl = "HTTPS://SEU-LINK-DIRETO-AQUI.COM/GTA_V.zip"
+        $outputFile = "$env:TEMP\gta_lite.zip"
+        $extractPath = "C:\Games\GTA_V"
+
+        Write-Host "Baixando arquivos do GTA V..."
+        Invoke-WebRequest -Uri $gtaUrl -OutFile $outputFile
+
+        Write-Host "Extraindo arquivos para $extractPath..."
+        # Se for .zip nativo:
+        Expand-Archive -Path $outputFile -DestinationPath $extractPath -Force
+
+        # Caso o arquivo seja .rar ou .7z, use a linha do 7-Zip abaixo (remova o # da linha seguinte):
+        # & "C:\Program Files\7-Zip\7z.exe" x $outputFile "-o$extractPath" -y
+
+        Remove-Item $outputFile
+        Write-Host "GTA V extraído com sucesso!"
 
     - name: Configurar Senha do Windows e RDP
       shell: powershell
