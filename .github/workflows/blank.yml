@@ -35,7 +35,9 @@ jobs:
     - name: Instalar Ferramentas de Compactação (7-Zip)
       shell: powershell
       run: |
-        winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements
+        $ErrorActionPreference = 'SilentlyContinue'
+        winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
+        exit 0
 
     - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox, FiveM)
       shell: powershell
@@ -58,6 +60,7 @@ jobs:
         winget install --id CitizenFX.FiveM --silent --accept-source-agreements --accept-package-agreements
 
         Write-Host "Instalações de apps concluídas!"
+        exit 0
 
     - name: Baixar e Extrair GTA V Lite
       shell: powershell
@@ -74,7 +77,7 @@ jobs:
         # Se for .zip nativo:
         Expand-Archive -Path $outputFile -DestinationPath $extractPath -Force
 
-        # Caso o arquivo seja .rar ou .7z, use a linha do 7-Zip abaixo (remova o # da linha seguinte):
+        # Caso o arquivo seja .rar ou .7z, comente a linha acima e use a linha abaixo:
         # & "C:\Program Files\7-Zip\7z.exe" x $outputFile "-o$extractPath" -y
 
         Remove-Item $outputFile
