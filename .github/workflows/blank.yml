@@ -32,29 +32,7 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar e Auto-Configurar Sunshine
-      shell: powershell
-      run: |
-        $ErrorActionPreference = 'SilentlyContinue'
-        Write-Host "Instalando Sunshine..."
-        winget install --id LizardByte.Sunshine --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
-
-        $sunshineConfigPath = "$env:ProgramFiles\LizardByte\Sunshine\config"
-        New-Item -ItemType Directory -Force -Path $sunshineConfigPath
-
-        # Define usuario 'sunshine' e senha 'sunshine123'
-        Write-Host "Criando credenciais padrao..."
-        cmd.exe /c "C:\Program Files\LizardByte\Sunshine\sunshine.exe --creds sunshine sunshine123"
-
-        Write-Host "Liberando portas no Firewall..."
-        New-NetFirewallRule -DisplayName "Sunshine-TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 47984,47989,47990,48010
-        New-NetFirewallRule -DisplayName "Sunshine-UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 47998,47999,48000,48002,48010
-
-        Write-Host "Iniciando o Sunshine..."
-        Start-Process -FilePath "C:\Program Files\LizardByte\Sunshine\sunshine.exe" -WindowStyle Hidden
-        exit 0
-
-    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox, FiveM)
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -71,11 +49,7 @@ jobs:
         Write-Host "Instalando Bloxstrap..."
         winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalando FiveM..."
-        winget install --id CitizenFX.FiveM --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalacoes concluidas!"
-        exit 0
+        Write-Host "Instalações concluídas!"
 
     - name: Configurar Senha do Windows e RDP
       shell: powershell
@@ -101,5 +75,5 @@ jobs:
     - name: Manter Runner Ativo
       shell: powershell
       run: |
-        Write-Host "Tudo pronto! Sunshine pre-configurado."
+        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
         Start-Sleep -Seconds 21600
