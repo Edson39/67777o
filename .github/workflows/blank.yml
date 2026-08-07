@@ -32,7 +32,22 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
+    - name: Instalar Sunshine (Servidor Moonlight)
+      shell: powershell
+      run: |
+        $ErrorActionPreference = 'SilentlyContinue'
+        Write-Host "Instalando Sunshine..."
+        winget install --id LizardByte.Sunshine --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
+        
+        Write-Host "Liberando portas do Moonlight/Sunshine no Firewall..."
+        New-NetFirewallRule -DisplayName "Sunshine-TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 47984,47989,47990,48010
+        New-NetFirewallRule -DisplayName "Sunshine-UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 47998,47999,48000,48002,48010
+
+        Write-Host "Iniciando o serviço do Sunshine..."
+        Start-Process -FilePath "C:\Program Files\LizardByte\Sunshine\sunshine.exe" -WindowStyle Hidden
+        exit 0
+
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox, FiveM)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -49,7 +64,11 @@ jobs:
         Write-Host "Instalando Bloxstrap..."
         winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
 
+        Write-Host "Instalando FiveM..."
+        winget install --id CitizenFX.FiveM --silent --accept-source-agreements --accept-package-agreements
+
         Write-Host "Instalações concluídas!"
+        exit 0
 
     - name: Configurar Senha do Windows e RDP
       shell: powershell
@@ -75,5 +94,5 @@ jobs:
     - name: Manter Runner Ativo
       shell: powershell
       run: |
-        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
+        Write-Host "Tudo pronto! Sunshine ativo e portas liberadas."
         Start-Sleep -Seconds 21600
