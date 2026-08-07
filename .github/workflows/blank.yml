@@ -32,14 +32,7 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar Ferramentas de Compactação (7-Zip)
-      shell: powershell
-      run: |
-        $ErrorActionPreference = 'SilentlyContinue'
-        winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
-        exit 0
-
-    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox, FiveM)
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -56,44 +49,7 @@ jobs:
         Write-Host "Instalando Bloxstrap..."
         winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalando FiveM..."
-        winget install --id CitizenFX.FiveM --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalacoes de apps concluidas!"
-        exit 0
-
-    - name: Baixar e Extrair GTA V (MediaFire)
-      shell: powershell
-      run: |
-        $mediafirePage = "https://www.mediafire.com/file/vj09qohcjbihzrg"
-        $outputFile = "$env:TEMP\gta_v_file"
-        $extractPath = "C:\Games\GTA_V"
-
-        Write-Host "Extraindo o link de download direto do MediaFire..."
-        $pageHtml = (Invoke-WebRequest -Uri $mediafirePage -UseBasicParsing).Content
-        if ($pageHtml -match 'href="(https://download[0-9]*\.mediafire\.com/[^"]+)"') {
-            $directUrl = $matches[1]
-            Write-Host "Link direto encontrado: $directUrl"
-            
-            Write-Host "Iniciando download do GTA V..."
-            Invoke-WebRequest -Uri $directUrl -OutFile $outputFile
-
-            Write-Host "Extraindo arquivos para $extractPath..."
-            New-Item -ItemType Directory -Force -Path $extractPath | Out-Null
-
-            # Tenta extrair com 7-Zip (suporta .zip, .rar, .7z)
-            if (Test-Path "C:\Program Files\7-Zip\7z.exe") {
-                & "C:\Program Files\7-Zip\7z.exe" x $outputFile "-o$extractPath" -y
-            } else {
-                Expand-Archive -Path $outputFile -DestinationPath $extractPath -Force
-            }
-
-            Remove-Item -Path $outputFile -ErrorAction SilentlyContinue
-            Write-Host "GTA V instalado e extraído com sucesso em $extractPath!"
-        } else {
-            Write-Error "Não foi possível obter o link de download direto do MediaFire."
-            exit 1
-        }
+        Write-Host "Instalações concluídas!"
 
     - name: Configurar Senha do Windows e RDP
       shell: powershell
@@ -102,6 +58,30 @@ jobs:
         Set-LocalUser -Name "runneradmin" -Password $password
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+    - name: Configurar Papel de Parede
+      shell: powershell
+      run: |
+        $ImagePath = "$env:PUBLIC\Pictures\wallpaper.jpg"
+        
+        if (Test-Path ".\e54ff1cc376b23c96a3d27edaadbc1fc.jpg") {
+            Copy-Item ".\e54ff1cc376b23c96a3d27edaadbc1fc.jpg" -Destination $ImagePath -Force
+            
+            Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name wallpaper -Value $ImagePath
+            
+            $code = @"
+            using System.Runtime.InteropServices;
+            public class Wallpaper {
+                [DllImport("user32.dll", CharSet = CharSet.Auto)]
+                public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+            }
+"@
+            Add-Type $code
+            [Wallpaper]::SystemParametersInfo(0x0014, 0, $ImagePath, 0x01 -bor 0x02)
+            Write-Host "Papel de parede configurado com sucesso!"
+        } else {
+            Write-Host "Imagem e54ff1cc376b23c96a3d27edaadbc1fc.jpg não encontrada!"
+        }
 
     - name: Manter Runner Ativo
       shell: powershell
