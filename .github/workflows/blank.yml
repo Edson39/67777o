@@ -1,4 +1,4 @@
-name: Windows AnyDesk & Tailscale Runner
+Name: Windows AnyDesk & Tailscale Runner
 
 on:
   workflow_dispatch:
@@ -32,32 +32,7 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar e Configurar Sunshine
-      shell: powershell
-      run: |
-        Write-Host "Instalando Sunshine..."
-        winget install --id LizardByte.Sunshine --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
-
-        # Procura o executavel dinamicamente caso mude de pasta
-        $sunshineExe = (Get-ChildItem -Path "C:\Program Files" -Filter "sunshine.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
-        if (-not $sunshineExe) {
-            $sunshineExe = "C:\Program Files\LizardByte\Sunshine\sunshine.exe"
-        }
-
-        # Garante diretorios de configuracao
-        $configPath = Split-Path -Path $sunshineExe -Parent | Join-Path -ChildPath "config"
-        if (-not (Test-Path $configPath)) { New-Item -ItemType Directory -Path $configPath -Force }
-
-        Write-Host "Configurando credenciais padrao..."
-        if (Test-Path $sunshineExe) {
-            & "$sunshineExe" --creds admin 12345678
-        }
-
-        Write-Host "Liberando Firewall..."
-        New-NetFirewallRule -DisplayName "Sunshine-TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 47984,47989,47990,48010 -ErrorAction SilentlyContinue
-        New-NetFirewallRule -DisplayName "Sunshine-UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 47998,47999,48000,48002,48010 -ErrorAction SilentlyContinue
-
-    - name: Instalar Aplicativos (Discord e Steam)
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -68,34 +43,21 @@ jobs:
         Write-Host "Instalando Steam..."
         winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalacoes concluidas!"
+        Write-Host "Instalando Roblox Player..."
+        winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
 
-    - name: Configurar Autologin e Desativar Tela de Bloqueio
+        Write-Host "Instalando Bloxstrap..."
+        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
+
+        Write-Host "Instalações concluídas!"
+
+    - name: Configurar Senha do Windows e RDP
       shell: powershell
       run: |
-        $passwordText = "SuaSenhaForte123!"
-        $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
+        $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $password
-
-        # Ativa RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-        # Configura Autologin sem Ctrl+Alt+Del
-        $logonPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
-        Set-ItemProperty -Path $logonPath -Name "AutoAdminLogon" -Value "1"
-        Set-ItemProperty -Path $logonPath -Name "DefaultUserName" -Value "runneradmin"
-        Set-ItemProperty -Path $logonPath -Name "DefaultPassword" -Value $passwordText
-        Set-ItemProperty -Path $logonPath -Name "DisableCAD" -Value 1
-
-        # Cria chaves do registro caso nao existam
-        $desktopKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Control Panel\Desktop"
-        if (-not (Test-Path $desktopKey)) { New-Item -Path $desktopKey -Force }
-        Set-ItemProperty -Path $desktopKey -Name "ScreenSaveActive" -Value "0"
-
-        $powerKey = "HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51"
-        if (-not (Test-Path $powerKey)) { New-Item -Path $powerKey -Force }
-        Set-ItemProperty -Path $powerKey -Name "ACSettingIndex" -Value 0
 
     - name: Configurar Papel de Parede
       shell: powershell
@@ -107,19 +69,11 @@ jobs:
         
         Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }'
         [W]::SystemParametersInfo(0x0014, 0, $imgPath, 0x01 -bor 0x02)
+        
+        Write-Host "Papel de parede configurado com sucesso!"
 
-    - name: Iniciar Sunshine e Manter Runner Ativo
+    - name: Manter Runner Ativo
       shell: powershell
       run: |
-        Write-Host "Localizando executavel do Sunshine..."
-        $sunshineExe = (Get-ChildItem -Path "C:\Program Files" -Filter "sunshine.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
-        
-        if (-not $sunshineExe) {
-            $sunshineExe = "C:\Program Files\LizardByte\Sunshine\sunshine.exe"
-        }
-
-        Write-Host "Iniciando Sunshine no Desktop..."
-        Start-Process -FilePath $sunshineExe -WindowStyle Hidden
-        
-        Write-Host "Tudo pronto! O Windows esta liberado para acesso direto pelo Moonlight."
+        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
         Start-Sleep -Seconds 21600
