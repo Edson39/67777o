@@ -38,15 +38,27 @@ jobs:
         Write-Host "Instalando Sunshine..."
         winget install --id LizardByte.Sunshine --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
 
-        $sunshinePath = "C:\Program Files\LizardByte\Sunshine"
-        $configPath = "$sunshinePath\config"
-
-        if (-not (Test-Path $configPath)) {
-            New-Item -ItemType Directory -Path $configPath -Force
+        $sunshinePath = "C:\Program Files\LizardByte\Sunshine\sunshine.exe"
+        
+        # Aguarda a instalacao finalizar completamente
+        $timeout = 0
+        while (-not (Test-Path $sunshinePath) -and $timeout -lt 30) {
+            Start-Sleep -Seconds 2
+            $timeout += 2
         }
 
+        # Garante diretorios de configuracao
+        $configPath = "C:\Program Files\LizardByte\Sunshine\config"
+        $appDataPath = "$env:LOCALAPPDATA\sunshine"
+        if (-not (Test-Path $configPath)) { New-Item -ItemType Directory -Path $configPath -Force }
+        if (-not (Test-Path $appDataPath)) { New-Item -ItemType Directory -Path $appDataPath -Force }
+
         Write-Host "Configurando credenciais..."
-        Start-Process -FilePath "$sunshinePath\sunshine.exe" -ArgumentList "--creds admin 12345678" -Wait -NoNewWindow
+        if (Test-Path $sunshinePath) {
+            & "$sunshinePath" --creds admin 12345678
+        } else {
+            Write-Host "Aviso: Executavel do Sunshine nao encontrado no caminho padrao."
+        }
 
         Write-Host "Liberando Firewall..."
         New-NetFirewallRule -DisplayName "Sunshine-TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 47984,47989,47990,48010 -ErrorAction SilentlyContinue
