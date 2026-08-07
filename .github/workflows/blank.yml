@@ -32,19 +32,25 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar Sunshine
+    - name: Instalar e Configurar Sunshine
       shell: powershell
       run: |
-        $ErrorActionPreference = 'SilentlyContinue'
         Write-Host "Instalando Sunshine..."
         winget install --id LizardByte.Sunshine --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
 
-        Write-Host "Configurando credenciais do Sunshine..."
-        cmd.exe /c "C:\Program Files\LizardByte\Sunshine\sunshine.exe --creds admin 12345678"
+        $sunshinePath = "C:\Program Files\LizardByte\Sunshine"
+        $configPath = "$sunshinePath\config"
 
-        Write-Host "Liberando portas no Firewall..."
-        New-NetFirewallRule -DisplayName "Sunshine-TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 47984,47989,47990,48010
-        New-NetFirewallRule -DisplayName "Sunshine-UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 47998,47999,48000,48002,48010
+        if (-not (Test-Path $configPath)) {
+            New-Item -ItemType Directory -Path $configPath -Force
+        }
+
+        Write-Host "Configurando credenciais..."
+        Start-Process -FilePath "$sunshinePath\sunshine.exe" -ArgumentList "--creds admin 12345678" -Wait -NoNewWindow
+
+        Write-Host "Liberando Firewall..."
+        New-NetFirewallRule -DisplayName "Sunshine-TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 47984,47989,47990,48010 -ErrorAction SilentlyContinue
+        New-NetFirewallRule -DisplayName "Sunshine-UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 47998,47999,48000,48002,48010 -ErrorAction SilentlyContinue
 
     - name: Instalar Jogos e Aplicativos
       shell: powershell
