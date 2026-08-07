@@ -38,31 +38,26 @@ jobs:
         Write-Host "Instalando Sunshine..."
         winget install --id LizardByte.Sunshine --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
 
-        $sunshinePath = "C:\Program Files\LizardByte\Sunshine\sunshine.exe"
-        
-        $timeout = 0
-        while (-not (Test-Path $sunshinePath) -and $timeout -lt 30) {
-            Start-Sleep -Seconds 2
-            $timeout += 2
+        # Procura o executavel dinamicamente caso mude de pasta
+        $sunshineExe = (Get-ChildItem -Path "C:\Program Files" -Filter "sunshine.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+        if (-not $sunshineExe) {
+            $sunshineExe = "C:\Program Files\LizardByte\Sunshine\sunshine.exe"
         }
 
-        $configPath = "C:\Program Files\LizardByte\Sunshine\config"
-        $appDataPath = "$env:LOCALAPPDATA\sunshine"
+        # Garante diretorios de configuracao
+        $configPath = Split-Path -Path $sunshineExe -Parent | Join-Path -ChildPath "config"
         if (-not (Test-Path $configPath)) { New-Item -ItemType Directory -Path $configPath -Force }
-        if (-not (Test-Path $appDataPath)) { New-Item -ItemType Directory -Path $appDataPath -Force }
 
-        Write-Host "Configurando credenciais..."
-        if (Test-Path $sunshinePath) {
-            & "$sunshinePath" --creds admin 12345678
-        } else {
-            Write-Host "Aviso: Executavel do Sunshine nao encontrado no caminho padrao."
+        Write-Host "Configurando credenciais padrao..."
+        if (Test-Path $sunshineExe) {
+            & "$sunshineExe" --creds admin 12345678
         }
 
         Write-Host "Liberando Firewall..."
         New-NetFirewallRule -DisplayName "Sunshine-TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 47984,47989,47990,48010 -ErrorAction SilentlyContinue
         New-NetFirewallRule -DisplayName "Sunshine-UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 47998,47999,48000,48002,48010 -ErrorAction SilentlyContinue
 
-    - name: Instalar Jogos e Aplicativos
+    - name: Instalar Aplicativos (Discord e Steam)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -72,12 +67,6 @@ jobs:
 
         Write-Host "Instalando Steam..."
         winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalando Roblox Player..."
-        winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalando Bloxstrap..."
-        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
 
         Write-Host "Instalacoes concluidas!"
 
@@ -99,21 +88,14 @@ jobs:
         Set-ItemProperty -Path $logonPath -Name "DefaultPassword" -Value $passwordText
         Set-ItemProperty -Path $logonPath -Name "DisableCAD" -Value 1
 
-        # Cria a chave do registro caso ela nao exista antes de definir o valor
+        # Cria chaves do registro caso nao existam
         $desktopKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Control Panel\Desktop"
-        if (-not (Test-Path $desktopKey)) {
-            New-Item -Path $desktopKey -Force
-        }
+        if (-not (Test-Path $desktopKey)) { New-Item -Path $desktopKey -Force }
         Set-ItemProperty -Path $desktopKey -Name "ScreenSaveActive" -Value "0"
 
         $powerKey = "HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51"
-        if (-not (Test-Path $powerKey)) {
-            New-Item -Path $powerKey -Force
-        }
+        if (-not (Test-Path $powerKey)) { New-Item -Path $powerKey -Force }
         Set-ItemProperty -Path $powerKey -Name "ACSettingIndex" -Value 0
-
-        # Agenda o Sunshine para rodar na sessao do usuario
-        schtasks /create /tn "SunshineStartup" /tr "C:\Program Files\LizardByte\Sunshine\sunshine.exe" /sc onlogon /ru runneradmin /f
 
     - name: Configurar Papel de Parede
       shell: powershell
@@ -129,7 +111,15 @@ jobs:
     - name: Iniciar Sunshine e Manter Runner Ativo
       shell: powershell
       run: |
+        Write-Host "Localizando executavel do Sunshine..."
+        $sunshineExe = (Get-ChildItem -Path "C:\Program Files" -Filter "sunshine.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+        
+        if (-not $sunshineExe) {
+            $sunshineExe = "C:\Program Files\LizardByte\Sunshine\sunshine.exe"
+        }
+
         Write-Host "Iniciando Sunshine no Desktop..."
-        Start-Process -FilePath "C:\Program Files\LizardByte\Sunshine\sunshine.exe" -WindowStyle Hidden
+        Start-Process -FilePath $sunshineExe -WindowStyle Hidden
+        
         Write-Host "Tudo pronto! O Windows esta liberado para acesso direto pelo Moonlight."
         Start-Sleep -Seconds 21600
