@@ -59,29 +59,41 @@ jobs:
         Write-Host "Instalando FiveM..."
         winget install --id CitizenFX.FiveM --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalações de apps concluídas!"
+        Write-Host "Instalacoes de apps concluidas!"
         exit 0
 
-    - name: Baixar e Extrair GTA V Lite
+    - name: Baixar e Extrair GTA V (MediaFire)
       shell: powershell
       run: |
-        # Substitua a URL abaixo pelo link direto do seu arquivo (.zip, .rar ou .7z)
-        $gtaUrl = "HTTPS://SEU-LINK-DIRETO-AQUI.COM/GTA_V.zip"
-        $outputFile = "$env:TEMP\gta_lite.zip"
+        $mediafirePage = "https://www.mediafire.com/file/vj09qohcjbihzrg"
+        $outputFile = "$env:TEMP\gta_v_file"
         $extractPath = "C:\Games\GTA_V"
 
-        Write-Host "Baixando arquivos do GTA V..."
-        Invoke-WebRequest -Uri $gtaUrl -OutFile $outputFile
+        Write-Host "Extraindo o link de download direto do MediaFire..."
+        $pageHtml = (Invoke-WebRequest -Uri $mediafirePage -UseBasicParsing).Content
+        if ($pageHtml -match 'href="(https://download[0-9]*\.mediafire\.com/[^"]+)"') {
+            $directUrl = $matches[1]
+            Write-Host "Link direto encontrado: $directUrl"
+            
+            Write-Host "Iniciando download do GTA V..."
+            Invoke-WebRequest -Uri $directUrl -OutFile $outputFile
 
-        Write-Host "Extraindo arquivos para $extractPath..."
-        # Se for .zip nativo:
-        Expand-Archive -Path $outputFile -DestinationPath $extractPath -Force
+            Write-Host "Extraindo arquivos para $extractPath..."
+            New-Item -ItemType Directory -Force -Path $extractPath | Out-Null
 
-        # Caso o arquivo seja .rar ou .7z, comente a linha acima e use a linha abaixo:
-        # & "C:\Program Files\7-Zip\7z.exe" x $outputFile "-o$extractPath" -y
+            # Tenta extrair com 7-Zip (suporta .zip, .rar, .7z)
+            if (Test-Path "C:\Program Files\7-Zip\7z.exe") {
+                & "C:\Program Files\7-Zip\7z.exe" x $outputFile "-o$extractPath" -y
+            } else {
+                Expand-Archive -Path $outputFile -DestinationPath $extractPath -Force
+            }
 
-        Remove-Item $outputFile
-        Write-Host "GTA V extraído com sucesso!"
+            Remove-Item -Path $outputFile -ErrorAction SilentlyContinue
+            Write-Host "GTA V instalado e extraído com sucesso em $extractPath!"
+        } else {
+            Write-Error "Não foi possível obter o link de download direto do MediaFire."
+            exit 1
+        }
 
     - name: Configurar Senha do Windows e RDP
       shell: powershell
