@@ -40,14 +40,12 @@ jobs:
 
         $sunshinePath = "C:\Program Files\LizardByte\Sunshine\sunshine.exe"
         
-        # Aguarda a instalacao finalizar completamente
         $timeout = 0
         while (-not (Test-Path $sunshinePath) -and $timeout -lt 30) {
             Start-Sleep -Seconds 2
             $timeout += 2
         }
 
-        # Garante diretorios de configuracao
         $configPath = "C:\Program Files\LizardByte\Sunshine\config"
         $appDataPath = "$env:LOCALAPPDATA\sunshine"
         if (-not (Test-Path $configPath)) { New-Item -ItemType Directory -Path $configPath -Force }
@@ -101,9 +99,18 @@ jobs:
         Set-ItemProperty -Path $logonPath -Name "DefaultPassword" -Value $passwordText
         Set-ItemProperty -Path $logonPath -Name "DisableCAD" -Value 1
 
-        # Desativa protecao de tela e repouso
-        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Control Panel\Desktop' -Name "ScreenSaveActive" -Value "0"
-        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51' -Name "ACSettingIndex" -Value 0
+        # Cria a chave do registro caso ela nao exista antes de definir o valor
+        $desktopKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Control Panel\Desktop"
+        if (-not (Test-Path $desktopKey)) {
+            New-Item -Path $desktopKey -Force
+        }
+        Set-ItemProperty -Path $desktopKey -Name "ScreenSaveActive" -Value "0"
+
+        $powerKey = "HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51"
+        if (-not (Test-Path $powerKey)) {
+            New-Item -Path $powerKey -Force
+        }
+        Set-ItemProperty -Path $powerKey -Name "ACSettingIndex" -Value 0
 
         # Agenda o Sunshine para rodar na sessao do usuario
         schtasks /create /tn "SunshineStartup" /tr "C:\Program Files\LizardByte\Sunshine\sunshine.exe" /sc onlogon /ru runneradmin /f
