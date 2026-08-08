@@ -17,14 +17,6 @@ jobs:
         authkey: ${{ secrets.TS_AUTHKEY }}
         args: --accept-routes
 
-    - name: Otimizar Efeitos Visuais
-      shell: powershell
-      run: |
-        Write-Host "Ajustando desempenho visual..."
-        $VisualKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
-        if (-not (Test-Path $VisualKey)) { New-Item -Path $VisualKey -Force }
-        Set-ItemProperty -Path $VisualKey -Name "VisualFXSetting" -Value 2
-
     - name: Instalar e Configurar AnyDesk
       shell: powershell
       run: |
@@ -40,7 +32,7 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar Aplicativos (Discord e Steam)
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -51,49 +43,34 @@ jobs:
         Write-Host "Instalando Steam..."
         winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalacoes concluidas!"
+        Write-Host "Instalando Roblox Player..."
+        winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
 
-    - name: Baixar e Instalar MTA:SA
+        Write-Host "Instalando Bloxstrap..."
+        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
+
+        Write-Host "Instalações concluídas!"
+
+    - name: Configurar Senha do Windows e RDP
       shell: powershell
       run: |
-        $ErrorActionPreference = 'SilentlyContinue'
-        
-        Write-Host "Baixando o instalador do MTA:SA..."
-        $mtaInstaller = "$env:TEMP\mta_installer.exe"
-        Invoke-WebRequest -Uri "https://nightly.multitheftauto.com/mtasa-1.6-full_latest.exe" -OutFile $mtaInstaller
-
-        Write-Host "Instalando MTA:SA..."
-        Start-Process -FilePath $mtaInstaller -ArgumentList "/S" -Wait
-
-        Write-Host "MTA:SA instalado com sucesso!"
-
-    - name: Configurar Autologin e Desativar Tela de Bloqueio
-      shell: powershell
-      run: |
-        $passwordText = "SuaSenhaForte123!"
-        $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
+        $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $password
-
-        $logonPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
-        Set-ItemProperty -Path $logonPath -Name "AutoAdminLogon" -Value "1"
-        Set-ItemProperty -Path $logonPath -Name "DefaultUserName" -Value "runneradmin"
-        Set-ItemProperty -Path $logonPath -Name "DefaultPassword" -Value $passwordText
-        Set-ItemProperty -Path $logonPath -Name "DisableCAD" -Value 1
-
-        $desktopKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Control Panel\Desktop"
-        if (-not (Test-Path $desktopKey)) { New-Item -Path $desktopKey -Force }
-        Set-ItemProperty -Path $desktopKey -Name "ScreenSaveActive" -Value "0"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
     - name: Configurar Papel de Parede
       shell: powershell
       run: |
-        $imgPath = "C:\Windows\Web\Wallpaper\Windows\img0.jpg"
+        $imgPath = (Get-Item ".\e54ff1cc376b23c96a3d27edaadbc1fc.jpg").FullName
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $imgPath
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value "10"
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value "0"
         
         Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }'
         [W]::SystemParametersInfo(0x0014, 0, $imgPath, 0x01 -bor 0x02)
+        
+        Write-Host "Papel de parede configurado com sucesso!"
 
     - name: Manter Runner Ativo
       shell: powershell
