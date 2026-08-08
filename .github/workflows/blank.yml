@@ -17,6 +17,27 @@ jobs:
         authkey: ${{ secrets.TS_AUTHKEY }}
         args: --accept-routes
 
+    - name: Otimizar Memoria Virtual (Pagefile) e Desempenho
+      shell: powershell
+      run: |
+        Write-Host "Configurando Pagefile de 16GB para alta estabilidade..."
+        $System = Get-WmiObject -Class Win32_WMISetting
+        $System.EnableAllPrivileges = $true
+        $PageFile = Get-WmiObject -Class Win32_PageFileSetting
+        if ($PageFile) {
+            $PageFile.InitialSize = 16384
+            $PageFile.MaximumSize = 16384
+            $PageFile.Put()
+        }
+
+        Write-Host "Forçando Modo de Alto Desempenho do Windows..."
+        powercfg /setactive 8c5e7cd5-5a3b-4280-bf5c-0595bf766300
+
+        # Desativa efeitos visuais do Windows para economizar CPU
+        $VisualKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
+        if (-not (Test-Path $VisualKey)) { New-Item -Path $VisualKey -Force }
+        Set-ItemProperty -Path $VisualKey -Name "VisualFXSetting" -Value 2
+
     - name: Instalar e Configurar AnyDesk
       shell: powershell
       run: |
@@ -32,7 +53,31 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
+    - name: Instalar Driver de Monitor Virtual (VDD)
+      shell: powershell
+      run: |
+        Write-Host "Baixando Virtual Display Driver..."
+        $vddUrl = "https://github.com/itsmikethetech/Virtual-Display-Driver/releases/latest/download/Virtual-Display-Driver.zip"
+        $zipPath = "$env:TEMP\VDD.zip"
+        $extractPath = "C:\VDD"
+
+        Invoke-WebRequest -Uri $vddUrl -OutFile $zipPath
+        Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+
+        Write-Host "Instalando certificado do driver..."
+        $certPath = Get-ChildItem -Path $extractPath -Filter "*.cer" -Recurse | Select-Object -First 1
+        if ($certPath) {
+            Import-Certificate -FilePath $certPath.FullName -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+            Import-Certificate -FilePath $certPath.FullName -CertStoreLocation Cert:\LocalMachine\Root
+        }
+
+        Write-Host "Instalando o dispositivo de video virtual..."
+        $infPath = Get-ChildItem -Path $extractPath -Filter "*.inf" -Recurse | Select-Object -First 1
+        if ($infPath) {
+            pnputil /add-driver $infPath.FullName /install
+        }
+
+    - name: Instalar Aplicativos (Discord e Steam)
       shell: powershell
       run: |
         $ErrorActionPreference = 'SilentlyContinue'
@@ -43,21 +88,38 @@ jobs:
         Write-Host "Instalando Steam..."
         winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalando Roblox Player..."
-        winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
+        Write-Host "Instalacoes de apps concluidas!"
 
-        Write-Host "Instalando Bloxstrap..."
-        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalações concluídas!"
-
-    - name: Configurar Senha do Windows e RDP
+    - name: Baixar e Instalar MTA:SA
       shell: powershell
       run: |
-        $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
+        $ErrorActionPreference = 'SilentlyContinue'
+        
+        Write-Host "Baixando o instalador do MTA:SA..."
+        $mtaInstaller = "$env:TEMP\mta_installer.exe"
+        Invoke-WebRequest -Uri "https://nightly.multitheftauto.com/mtasa-1.6-full_latest.exe" -OutFile $mtaInstaller
+
+        Write-Host "Instalando MTA:SA..."
+        Start-Process -FilePath $mtaInstaller -ArgumentList "/S" -Wait
+
+        Write-Host "MTA:SA instalado com sucesso!"
+
+    - name: Configurar Autologin e Desativar Tela de Bloqueio
+      shell: powershell
+      run: |
+        $passwordText = "SuaSenhaForte123!"
+        $password = ConvertTo-SecureString $passwordText -AsPlainText -Force
         Set-LocalUser -Name "runneradmin" -Password $password
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+        $logonPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+        Set-ItemProperty -Path $logonPath -Name "AutoAdminLogon" -Value "1"
+        Set-ItemProperty -Path $logonPath -Name "DefaultUserName" -Value "runneradmin"
+        Set-ItemProperty -Path $logonPath -Name "DefaultPassword" -Value $passwordText
+        Set-ItemProperty -Path $logonPath -Name "DisableCAD" -Value 1
+
+        $desktopKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Control Panel\Desktop"
+        if (-not (Test-Path $desktopKey)) { New-Item -Path $desktopKey -Force }
+        Set-ItemProperty -Path $desktopKey -Name "ScreenSaveActive" -Value "0"
 
     - name: Configurar Papel de Parede
       shell: powershell
@@ -69,11 +131,9 @@ jobs:
         
         Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }'
         [W]::SystemParametersInfo(0x0014, 0, $imgPath, 0x01 -bor 0x02)
-        
-        Write-Host "Papel de parede configurado com sucesso!"
 
     - name: Manter Runner Ativo
       shell: powershell
       run: |
-        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
+        Write-Host "Tudo pronto! O Windows esta liberado no modo de Desempenho Maximo."
         Start-Sleep -Seconds 21600
