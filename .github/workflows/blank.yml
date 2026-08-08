@@ -20,14 +20,10 @@ jobs:
     - name: Otimizar Memoria Virtual (Pagefile) e Desempenho
       shell: powershell
       run: |
-        Write-Host "Configurando Pagefile de 16GB para alta estabilidade..."
-        $System = Get-WmiObject -Class Win32_WMISetting
-        $System.EnableAllPrivileges = $true
-        $PageFile = Get-WmiObject -Class Win32_PageFileSetting
-        if ($PageFile) {
-            $PageFile.InitialSize = 16384
-            $PageFile.MaximumSize = 16384
-            $PageFile.Put()
+        Write-Host "Configurando Pagefile de 16GB..."
+        $pagefiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
+        if ($pagefiles) {
+            Set-CimInstance -InputObject $pagefiles -Property @{ InitialSize = 16384; MaximumSize = 16384 } -ErrorAction SilentlyContinue
         }
 
         Write-Host "Forçando Modo de Alto Desempenho do Windows..."
@@ -124,7 +120,8 @@ jobs:
     - name: Configurar Papel de Parede
       shell: powershell
       run: |
-        $imgPath = (Get-Item ".\e54ff1cc376b23c96a3d27edaadbc1fc.jpg").FullName
+        # Certifique-se de que o arquivo existe ou remova essa etapa se nao tiver o arquivo local
+        $imgPath = "C:\Windows\Web\Wallpaper\Windows\img0.jpg"
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $imgPath
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value "10"
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value "0"
