@@ -1,4 +1,4 @@
-Name: Windows AnyDesk & Tailscale Runner
+name: Windows AnyDesk & Tailscale Runner
 
 on:
   workflow_dispatch:
