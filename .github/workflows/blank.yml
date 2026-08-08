@@ -17,12 +17,10 @@ jobs:
         authkey: ${{ secrets.TS_AUTHKEY }}
         args: --accept-routes
 
-    - name: Otimizar Memoria Virtual (Pagefile) e Desempenho
+    - name: Otimizar Efeitos Visuais
       shell: powershell
       run: |
-        Write-Host "Configurando Pagefile e Efeitos Visuais..."
-        
-        # Ajusta efeitos visuais para melhor desempenho sem quebrar o powercfg
+        Write-Host "Ajustando desempenho visual..."
         $VisualKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
         if (-not (Test-Path $VisualKey)) { New-Item -Path $VisualKey -Force }
         Set-ItemProperty -Path $VisualKey -Name "VisualFXSetting" -Value 2
@@ -42,30 +40,6 @@ jobs:
         Restart-Service -Name "AnyDesk" -Force
         Start-Sleep -Seconds 10
 
-    - name: Instalar Driver de Monitor Virtual (VDD)
-      shell: powershell
-      run: |
-        Write-Host "Baixando Virtual Display Driver..."
-        $vddUrl = "https://github.com/itsmikethetech/Virtual-Display-Driver/releases/latest/download/Virtual-Display-Driver.zip"
-        $zipPath = "$env:TEMP\VDD.zip"
-        $extractPath = "C:\VDD"
-
-        Invoke-WebRequest -Uri $vddUrl -OutFile $zipPath
-        Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-
-        Write-Host "Instalando certificado do driver..."
-        $certPath = Get-ChildItem -Path $extractPath -Filter "*.cer" -Recurse | Select-Object -First 1
-        if ($certPath) {
-            Import-Certificate -FilePath $certPath.FullName -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
-            Import-Certificate -FilePath $certPath.FullName -CertStoreLocation Cert:\LocalMachine\Root
-        }
-
-        Write-Host "Instalando o dispositivo de video virtual..."
-        $infPath = Get-ChildItem -Path $extractPath -Filter "*.inf" -Recurse | Select-Object -First 1
-        if ($infPath) {
-            pnputil /add-driver $infPath.FullName /install
-        }
-
     - name: Instalar Aplicativos (Discord e Steam)
       shell: powershell
       run: |
@@ -77,7 +51,7 @@ jobs:
         Write-Host "Instalando Steam..."
         winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
 
-        Write-Host "Instalacoes de apps concluidas!"
+        Write-Host "Instalacoes concluidas!"
 
     - name: Baixar e Instalar MTA:SA
       shell: powershell
@@ -124,5 +98,5 @@ jobs:
     - name: Manter Runner Ativo
       shell: powershell
       run: |
-        Write-Host "Tudo pronto! O Windows esta liberado no modo de Desempenho Maximo."
+        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
         Start-Sleep -Seconds 21600
