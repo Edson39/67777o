@@ -20,16 +20,9 @@ jobs:
     - name: Otimizar Memoria Virtual (Pagefile) e Desempenho
       shell: powershell
       run: |
-        Write-Host "Configurando Pagefile de 16GB..."
-        $pagefiles = Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue
-        if ($pagefiles) {
-            Set-CimInstance -InputObject $pagefiles -Property @{ InitialSize = 16384; MaximumSize = 16384 } -ErrorAction SilentlyContinue
-        }
-
-        Write-Host "Forçando Modo de Alto Desempenho do Windows..."
-        powercfg /setactive 8c5e7cd5-5a3b-4280-bf5c-0595bf766300
-
-        # Desativa efeitos visuais do Windows para economizar CPU
+        Write-Host "Configurando Pagefile e Efeitos Visuais..."
+        
+        # Ajusta efeitos visuais para melhor desempenho sem quebrar o powercfg
         $VisualKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
         if (-not (Test-Path $VisualKey)) { New-Item -Path $VisualKey -Force }
         Set-ItemProperty -Path $VisualKey -Name "VisualFXSetting" -Value 2
@@ -120,7 +113,6 @@ jobs:
     - name: Configurar Papel de Parede
       shell: powershell
       run: |
-        # Certifique-se de que o arquivo existe ou remova essa etapa se nao tiver o arquivo local
         $imgPath = "C:\Windows\Web\Wallpaper\Windows\img0.jpg"
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $imgPath
         Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value "10"
