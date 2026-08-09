@@ -1,79 +1,30 @@
-name: Windows AnyDesk & Tailscale Runner
+name: Rodar Script com GPU no Kaggle
 
 on:
+  push:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: windows-latest
-    
+  executar-gpu:
+    runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Baixar código
+        uses: actions/checkout@v4
 
-    - name: Conectar ao Tailscale
-      uses: tailscale/github-action@v3
-      with:
-        authkey: ${{ secrets.TS_AUTHKEY }}
-        args: --accept-routes
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Instalar e Configurar AnyDesk
-      shell: powershell
-      run: |
-        Write-Host "Baixando AnyDesk..."
-        Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
-        
-        Write-Host "Instalando AnyDesk..."
-        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"C:\Program Files (x86)\AnyDesk`" --silent" -Wait
-        
-        Write-Host "Configurando Acesso Nao Supervisionado..."
-        cmd.exe /c "echo SuaSenhaForte123! | `"C:\Program Files (x86)\AnyDesk\AnyDesk.exe`" --set-password"
-        
-        Restart-Service -Name "AnyDesk" -Force
-        Start-Sleep -Seconds 10
+      - name: Instalar API do Kaggle
+        run: pip install kaggle
 
-    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
-      shell: powershell
-      run: |
-        $ErrorActionPreference = 'SilentlyContinue'
-
-        Write-Host "Instalando Discord..."
-        winget install --id Discord.Discord --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalando Steam..."
-        winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalando Roblox Player..."
-        winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalando Bloxstrap..."
-        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
-
-        Write-Host "Instalações concluídas!"
-
-    - name: Configurar Senha do Windows e RDP
-      shell: powershell
-      run: |
-        $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
-        Set-LocalUser -Name "runneradmin" -Password $password
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-    - name: Configurar Papel de Parede
-      shell: powershell
-      run: |
-        $imgPath = (Get-Item ".\e54ff1cc376b23c96a3d27edaadbc1fc.jpg").FullName
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $imgPath
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value "10"
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value "0"
-        
-        Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }'
-        [W]::SystemParametersInfo(0x0014, 0, $imgPath, 0x01 -bor 0x02)
-        
-        Write-Host "Papel de parede configurado com sucesso!"
-
-    - name: Manter Runner Ativo
-      shell: powershell
-      run: |
-        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
-        Start-Sleep -Seconds 21600
+      - name: Rodar Notebook na GPU do Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          # Envia seu notebook/script para rodar no Kaggle com GPU T4 ativada
+          kaggle kernels push -p ./
