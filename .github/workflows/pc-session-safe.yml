@@ -1,4 +1,4 @@
-Name: AI PC Session (safe)
+name: AI PC Session (safe)
 
 on:
   workflow_dispatch:
@@ -31,7 +31,7 @@ permissions:
 jobs:
   pc-session:
     runs-on: windows-latest
-    timeout-minutes: 380 # Aumentado levemente para dar margem à etapa de Cleanup caso session_hours seja 6
+    timeout-minutes: 380
     env:
       SENTINEL_AGENT_URL: ${{ secrets.SENTINEL_AGENT_URL }}
       SENTINEL_AGENT_SHA256: ${{ secrets.SENTINEL_AGENT_SHA256 }}
@@ -150,7 +150,6 @@ jobs:
           Remove-Item -Force (Join-Path $env:RUNNER_TEMP 'sentinel-agent.stdout.log') -ErrorAction SilentlyContinue
           Remove-Item -Force (Join-Path $env:RUNNER_TEMP 'sentinel-agent.stderr.log') -ErrorAction SilentlyContinue
           
-          # Limpeza de variáveis sensíveis no processo
           [System.Environment]::SetEnvironmentVariable('SENTINEL_PAIRING_TOKEN', $null, 'Process')
           [System.Environment]::SetEnvironmentVariable('SENTINEL_AGENT_URL', $null, 'Process')
           [System.Environment]::SetEnvironmentVariable('SENTINEL_AGENT_SHA256', $null, 'Process')
