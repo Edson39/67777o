@@ -19,9 +19,10 @@ on:
         description: "External task identifier"
         required: true
         type: string
-      download_url:
-        description: "Optional approved HTTPS download URL"
-        required: false
+      session_hours:
+        description: "Horas que a sessao deve ficar ativa"
+        required: true
+        default: "2"
         type: string
 
 permissions:
@@ -30,7 +31,7 @@ permissions:
 jobs:
   pc-session:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 360 # Limite maximo do GitHub Actions é de 6 horas (360 min)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -59,38 +60,11 @@ jobs:
             note       = "GitHub-hosted runner; destroyed after the workflow."
           }
           $metadata | ConvertTo-Json | Set-Content preview/metadata.json -Encoding UTF8
-          
-          @"
-          <!doctype html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <title>AI PC session</title>
-            <style>
-              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #07111f; color: #dffaff; padding: 32px; }
-              main { max-width: 720px; margin: auto; border: 1px solid #164e63; border-radius: 16px; padding: 24px; background: #0c1a2e; }
-              code { color: #67e8f9; background: #162a45; padding: 2px 6px; border-radius: 4px; }
-              h1 { color: #38bdf8; }
-            </style>
-          </head>
-          <body>
-            <main>
-              <h1>AI PC session snapshot</h1>
-              <p>Task ID: <code>${{ inputs.task_id }}</code></p>
-              <p>Runner: <code>$env:RUNNER_NAME</code></p>
-              <p>Operation: <code>${{ inputs.operation }}</code></p>
-              <p>Prompt: <code>${{ inputs.prompt }}</code></p>
-              <hr style="border-color: #164e63; margin: 20px 0;">
-              <p>This is an artifact snapshot. The hosted runner expires after the job.</p>
-            </main>
-          </body>
-          </html>
-          "@ | Set-Content preview/index.html -Encoding UTF8
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: pc-session-snapshot-${{ inputs.task_id }}
-          path: |
-            preview/
-            results/
+      - name: Keep session alive
+        shell: pwsh
+        run: |
+          $hours = [int]"${{ inputs.session_hours }}"
+          $seconds = $hours * 3600
+          Write-Host "Manter a sessao ativa por $hours hora(s) ($seconds segundos)..."
+          Start-Sleep -Seconds $seconds
