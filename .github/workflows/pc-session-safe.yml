@@ -20,136 +20,51 @@ on:
         required: true
         type: string
       session_hours:
-        description: "Horas que a sessão deve ficar ativa"
+        description: "Horas que a sessao deve ficar ativa"
         required: true
         default: "2"
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   pc-session:
     runs-on: windows-latest
-    timeout-minutes: 380
-    env:
-      SENTINEL_AGENT_URL: ${{ secrets.SENTINEL_AGENT_URL }}
-      SENTINEL_AGENT_SHA256: ${{ secrets.SENTINEL_AGENT_SHA256 }}
-      SENTINEL_PAIRING_TOKEN: ${{ secrets.SENTINEL_PAIRING_TOKEN }}
+    timeout-minutes: 360 # Limite maximo do GitHub Actions é de 6 horas (360 min)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate session inputs
-        shell: pwsh
-        env:
-          INPUT_OPERATION: ${{ inputs.operation }}
-          INPUT_SESSION_HOURS: ${{ inputs.session_hours }}
-          INPUT_TASK_ID: ${{ inputs.task_id }}
-        run: |
-          $allowed = @('inference', 'matrix_multiplication', 'embedding')
-          if ($env:INPUT_OPERATION -notin $allowed) { throw 'Operation not allowed.' }
-          
-          $hours = 0
-          if (-not [int]::TryParse($env:INPUT_SESSION_HOURS, [ref]$hours) -or $hours -lt 1 -or $hours -gt 6) {
-            throw 'session_hours must be an integer between 1 and 6.'
-          }
-          if ($env:INPUT_TASK_ID.Length -lt 1 -or $env:INPUT_TASK_ID.Length -gt 128) { throw 'Invalid task_id.' }
-          if ([string]::IsNullOrWhiteSpace($env:SENTINEL_AGENT_URL) -or [string]::IsNullOrWhiteSpace($env:SENTINEL_AGENT_SHA256) -or [string]::IsNullOrWhiteSpace($env:SENTINEL_PAIRING_TOKEN)) {
-            throw 'Missing SENTINEL_AGENT_URL, SENTINEL_AGENT_SHA256 or SENTINEL_PAIRING_TOKEN secret.'
-          }
-
       - name: Join private Tailscale network
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        if: ${{ env.TS_AUTHKEY != '' }}
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
           args: --accept-routes
 
-      - name: Install verified Sentinel agent
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $agentDir = Join-Path $env:RUNNER_TEMP 'sentinel-agent'
-          New-Item -ItemType Directory -Force -Path $agentDir | Out-Null
-          $agentPath = Join-Path $agentDir 'SentinelAgent.exe'
-          
-          Invoke-WebRequest -Uri $env:SENTINEL_AGENT_URL -OutFile $agentPath -UseBasicParsing
-          
-          $actual = (Get-FileHash -Path $agentPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = $env:SENTINEL_AGENT_SHA256.Trim().ToLowerInvariant()
-          if ($actual -ne $expected) { Remove-Item -Force $agentPath; throw 'Agent checksum mismatch.' }
-          if (-not (Test-Path $agentPath)) { throw 'Agent download failed.' }
-          
-          "AGENT_PATH=$agentPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "AGENT_DIR=$agentDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Create controlled session snapshot
         shell: pwsh
-        env:
-          SESSION_TASK_ID: ${{ inputs.task_id }}
-          SESSION_OPERATION: ${{ inputs.operation }}
-          SESSION_PROMPT: ${{ inputs.prompt }}
         run: |
           New-Item -ItemType Directory -Force -Path preview, results | Out-Null
+          
           $metadata = [ordered]@{
-            task_id    = $env:SESSION_TASK_ID
-            operation  = $env:SESSION_OPERATION
-            prompt     = $env:SESSION_PROMPT
+            task_id    = "${{ inputs.task_id }}"
+            operation  = "${{ inputs.operation }}"
+            prompt     = "${{ inputs.prompt }}"
             runner     = $env:RUNNER_NAME
             os         = $env:RUNNER_OS
-            created_at = (Get-Date).ToUniversalTime().ToString('o')
-            note       = 'Ephemeral GitHub-hosted runner; destroyed after the workflow.'
+            created_at = (Get-Date).ToUniversalTime().ToString("o")
+            note       = "GitHub-hosted runner; destroyed after the workflow."
           }
           $metadata | ConvertTo-Json | Set-Content preview/metadata.json -Encoding UTF8
 
-      - name: Start Sentinel agent session
-        shell: pwsh
-        env:
-          SESSION_TASK_ID: ${{ inputs.task_id }}
-          SESSION_OPERATION: ${{ inputs.operation }}
-          SESSION_PROMPT: ${{ inputs.prompt }}
-          SESSION_HOURS: ${{ inputs.session_hours }}
-        run: |
-          $stdout = Join-Path $env:RUNNER_TEMP 'sentinel-agent.stdout.log'
-          $stderr = Join-Path $env:RUNNER_TEMP 'sentinel-agent.stderr.log'
-          $args = @(
-            'session', 'start',
-            '--task-id', $env:SESSION_TASK_ID,
-            '--operation', $env:SESSION_OPERATION,
-            '--prompt', $env:SESSION_PROMPT,
-            '--duration-hours', $env:SESSION_HOURS,
-            '--non-interactive'
-          )
-          $process = Start-Process -FilePath $env:AGENT_PATH -ArgumentList $args -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-          $process.Id | Out-File -FilePath (Join-Path $env:RUNNER_TEMP 'sentinel-agent.pid') -Encoding ascii
-          
-          Start-Sleep -Seconds 3
-          if ($process.HasExited) { throw 'Sentinel agent exited during startup. Raw agent logs were intentionally not printed.' }
-
       - name: Keep session alive
         shell: pwsh
-        env:
-          SESSION_HOURS: ${{ inputs.session_hours }}
         run: |
-          $hours = [int]$env:SESSION_HOURS
-          Start-Sleep -Seconds ($hours * 3600)
-
-      - name: Cleanup Sentinel session
-        if: ${{ always() }}
-        shell: pwsh
-        run: |
-          $pidFile = Join-Path $env:RUNNER_TEMP 'sentinel-agent.pid'
-          if (Test-Path $pidFile) {
-            $agentPid = Get-Content $pidFile -ErrorAction SilentlyContinue
-            if ($agentPid) { Stop-Process -Id ([int]$agentPid) -Force -ErrorAction SilentlyContinue }
-          }
-          if ($env:AGENT_DIR -and (Test-Path $env:AGENT_DIR)) {
-            Remove-Item -Recurse -Force $env:AGENT_DIR -ErrorAction SilentlyContinue
-          }
-          Remove-Item -Force (Join-Path $env:RUNNER_TEMP 'sentinel-agent.pid') -ErrorAction SilentlyContinue
-          Remove-Item -Force (Join-Path $env:RUNNER_TEMP 'sentinel-agent.stdout.log') -ErrorAction SilentlyContinue
-          Remove-Item -Force (Join-Path $env:RUNNER_TEMP 'sentinel-agent.stderr.log') -ErrorAction SilentlyContinue
-          
-          [System.Environment]::SetEnvironmentVariable('SENTINEL_PAIRING_TOKEN', $null, 'Process')
-          [System.Environment]::SetEnvironmentVariable('SENTINEL_AGENT_URL', $null, 'Process')
-          [System.Environment]::SetEnvironmentVariable('SENTINEL_AGENT_SHA256', $null, 'Process')
+          $hours = [int]"${{ inputs.session_hours }}"
+          $seconds = $hours * 3600
+          Write-Host "Manter a sessao ativa por $hours hora(s) ($seconds segundos)..."
+          Start-Sleep -Seconds $seconds
