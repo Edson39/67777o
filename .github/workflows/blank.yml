@@ -1,1 +1,42 @@
+name: Cloud PC - Test
 
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verificar Python
+        run: python --version
+
+      - name: Verificar arquivos
+        run: |
+          test -f frontend/index.html
+          test -f frontend/style.css
+          test -f frontend/app.js
+          test -f backend/server.py
+          test -f colab/cloud_pc.py
+
+      - name: Testar backend
+        run: |
+          python -m py_compile backend/server.py
+          python -m py_compile colab/cloud_pc.py
+
+      - name: Finalizado
+        run: echo "✅ Cloud PC passou nos testes!"
