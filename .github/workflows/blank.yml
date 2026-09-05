@@ -1,4 +1,4 @@
-name: Cloud PC - Test
+name: Test Cloud GPU PC
 
 on:
   push:
@@ -14,29 +14,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar código
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Verificar Python
-        run: python --version
-
-      - name: Verificar arquivos
+      - name: Check files
         run: |
-          test -f frontend/index.html
-          test -f frontend/style.css
-          test -f frontend/app.js
-          test -f backend/server.py
-          test -f colab/cloud_pc.py
+          test -f colab/cloud_gpu_pc.py
+          test -f scripts/setup_desktop.sh
+          test -f requirements.txt
 
-      - name: Testar backend
+      - name: Test Python
         run: |
-          python -m py_compile backend/server.py
-          python -m py_compile colab/cloud_pc.py
+          python -m py_compile colab/cloud_gpu_pc.py
 
-      - name: Finalizado
-        run: echo "✅ Cloud PC passou nos testes!"
+      - name: Test shell
+        run: |
+          bash -n scripts/setup_desktop.sh
+
+      - name: Success
+        run: echo "✅ Cloud GPU PC project is valid!"
