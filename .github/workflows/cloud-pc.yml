@@ -1,0 +1,78 @@
+name: Cloud PC Simulation
+
+on:
+  workflow_dispatch:
+    inputs:
+      machine_id:
+        description: "Unique simulated Cloud PC identifier"
+        required: true
+        type: string
+      session_id:
+        description: "Session identifier"
+        required: true
+        type: string
+      game_id:
+        description: "Simulated game identifier"
+        required: true
+        type: string
+      duration:
+        description: "Session duration in seconds"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  cloud-pc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      MACHINE_ID: ${{ inputs.machine_id }}
+      SESSION_ID: ${{ inputs.session_id }}
+      GAME_ID: ${{ inputs.game_id }}
+      DURATION: ${{ inputs.duration }}
+    steps:
+      - name: Initialize simulation
+        run: |
+          echo "STATE=STARTING" >> "$GITHUB_STEP_SUMMARY"
+          echo "${MACHINE_ID} / ${SESSION_ID}: simulation environment initialized"
+          sleep 2
+
+      - name: Simulate Windows 10 boot
+        run: |
+          echo "STATE=BOOTING_WINDOWS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Windows 10 interface simulation is booting (no real Windows installation is used)."
+          sleep 4
+          echo "Windows 10 simulated shell loaded."
+
+      - name: Mark machine ready
+        run: |
+          echo "STATE=READY" >> "$GITHUB_STEP_SUMMARY"
+          echo "${MACHINE_ID} is ready for ${GAME_ID}."
+
+      - name: Run simulated session and telemetry
+        shell: bash
+        run: |
+          echo "STATE=GAMING" >> "$GITHUB_STEP_SUMMARY"
+          duration="${DURATION:-60}"
+          elapsed=0
+          while [ "$elapsed" -lt "$duration" ]; do
+            fps=$((58 + RANDOM % 5))
+            cpu=$((20 + RANDOM % 45))
+            gpu=$((45 + RANDOM % 40))
+            ram=$((35 + RANDOM % 30))
+            ping=$((28 + RANDOM % 35))
+            echo "telemetry machine=${MACHINE_ID} session=${SESSION_ID} fps=${fps} cpu=${cpu}% gpu=${gpu}% ram=${ram}% ping=${ping}ms"
+            sleep 10
+            elapsed=$((elapsed + 10))
+          done
+
+      - name: Stop and release simulated machine
+        if: always()
+        run: |
+          echo "STATE=STOPPING" >> "$GITHUB_STEP_SUMMARY"
+          echo "${MACHINE_ID} session ${SESSION_ID} stopping."
+          sleep 2
+          echo "STATE=AVAILABLE" >> "$GITHUB_STEP_SUMMARY"
+          echo "${MACHINE_ID} released."
