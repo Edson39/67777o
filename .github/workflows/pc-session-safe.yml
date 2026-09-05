@@ -32,11 +32,13 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Join private Tailscale network
-        if: ${{ secrets.TS_AUTHKEY != '' }}
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        if: ${{ env.TS_AUTHKEY != '' }}
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
@@ -46,45 +48,49 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path preview, results | Out-Null
+          
           $metadata = [ordered]@{
-            task_id = "${{ inputs.task_id }}"
-            operation = "${{ inputs.operation }}"
-            prompt = "${{ inputs.prompt }}"
-            runner = $env:RUNNER_NAME
-            os = $env:RUNNER_OS
+            task_id    = "${{ inputs.task_id }}"
+            operation  = "${{ inputs.operation }}"
+            prompt     = "${{ inputs.prompt }}"
+            runner     = $env:RUNNER_NAME
+            os         = $env:RUNNER_OS
             created_at = (Get-Date).ToUniversalTime().ToString("o")
-            note = "GitHub-hosted runner; destroyed after the workflow."
+            note       = "GitHub-hosted runner; destroyed after the workflow."
           }
           $metadata | ConvertTo-Json | Set-Content preview/metadata.json -Encoding UTF8
+          
           @"
-          <!doctype html><html><head><meta charset="utf-8"><title>AI PC session</title><style>body{font-family:Segoe UI;background:#07111f;color:#dffaff;padding:32px}main{max-width:720px;margin:auto;border:1px solid #164e63;border-radius:16px;padding:24px}code{color:#67e8f9}</style></head><body><main><h1>AI PC session snapshot</h1><p>Runner: <code>$env:RUNNER_NAME</code></p><p>Operation: <code>${{ inputs.operation }}</code></p><p>This is an artifact snapshot. The hosted runner expires after the job.</p></main></body></html>
+          <!doctype html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>AI PC session</title>
+            <style>
+              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #07111f; color: #dffaff; padding: 32px; }
+              main { max-width: 720px; margin: auto; border: 1px solid #164e63; border-radius: 16px; padding: 24px; background: #0c1a2e; }
+              code { color: #67e8f9; background: #162a45; padding: 2px 6px; border-radius: 4px; }
+              h1 { color: #38bdf8; }
+            </style>
+          </head>
+          <body>
+            <main>
+              <h1>AI PC session snapshot</h1>
+              <p>Task ID: <code>${{ inputs.task_id }}</code></p>
+              <p>Runner: <code>$env:RUNNER_NAME</code></p>
+              <p>Operation: <code>${{ inputs.operation }}</code></p>
+              <p>Prompt: <code>${{ inputs.prompt }}</code></p>
+              <hr style="border-color: #164e63; margin: 20px 0;">
+              <p>This is an artifact snapshot. The hosted runner expires after the job.</p>
+            </main>
+          </body>
+          </html>
           "@ | Set-Content preview/index.html -Encoding UTF8
 
-      - name: Download approved HTTPS file
-        if: ${{ inputs.download_url != '' }}
-        shell: pwsh
-        run: |
-          $url = "${{ inputs.download_url }}"
-          $uri = [Uri]$url
-          if ($uri.Scheme -ne "https") { throw "Only HTTPS downloads are allowed." }
-          if ($uri.UserInfo) { throw "Credential-bearing URLs are not allowed." }
-          $name = [IO.Path]::GetFileName($uri.AbsolutePath)
-          if ([string]::IsNullOrWhiteSpace($name)) { $name = "download.bin" }
-          if ($name -match '\.(exe|msi|bat|cmd|ps1|psm1|vbs|js|jar|scr|com)$') { throw "Executable or script downloads are blocked." }
-          $target = Join-Path $env:RUNNER_TEMP $name
-          Invoke-WebRequest -Uri $url -OutFile $target -MaximumRedirection 3
-          if ((Get-Item $target).Length -gt 25MB) { Remove-Item $target -Force; throw "Download exceeds the 25 MiB limit." }
-          @{ name = $name; size = (Get-Item $target).Length; source = $url; downloaded_at = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json | Set-Content results/download.json -Encoding UTF8
-
-      - name: Write structured result
-        shell: pwsh
-        run: |
-          @{ ok = $true; task_id = "${{ inputs.task_id }}"; operation = "${{ inputs.operation }}"; completed_at = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json | Set-Content "results/${{ inputs.task_id }}.json" -Encoding UTF8
-
-      - name: Publish snapshot and result
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ai-pc-preview-${{ inputs.task_id }}
+          name: pc-session-snapshot-${{ inputs.task_id }}
           path: |
-            preview
-            results
+            preview/
+            results/
