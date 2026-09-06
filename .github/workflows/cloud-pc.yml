@@ -1,78 +1,117 @@
-name: Cloud PC Simulation
+name: Cloud PC
 
 on:
   workflow_dispatch:
     inputs:
       machine_id:
-        description: "Unique simulated Cloud PC identifier"
+        description: "Identificador da Cloud PC (ex.: CloudPC-003)"
         required: true
         type: string
       session_id:
-        description: "Session identifier"
+        description: "Identificador da sessão"
         required: true
         type: string
       game_id:
-        description: "Simulated game identifier"
+        description: "Jogo simulado"
         required: true
         type: string
       duration:
-        description: "Session duration in seconds"
+        description: "Duração da sessão em segundos"
         required: true
+        default: "300"
         type: string
 
-permissions:
-  contents: read
+concurrency:
+  group: cloud-pc-${{ inputs.machine_id }}
+  cancel-in-progress: false
 
 jobs:
   cloud-pc:
+    name: ${{ inputs.machine_id }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
-    env:
-      MACHINE_ID: ${{ inputs.machine_id }}
-      SESSION_ID: ${{ inputs.session_id }}
-      GAME_ID: ${{ inputs.game_id }}
-      DURATION: ${{ inputs.duration }}
+    timeout-minutes: 30
     steps:
-      - name: Initialize simulation
+      - name: Inicializar ambiente
+        id: init
         run: |
-          echo "STATE=STARTING" >> "$GITHUB_STEP_SUMMARY"
-          echo "${MACHINE_ID} / ${SESSION_ID}: simulation environment initialized"
-          sleep 2
+          echo "MACHINE=${{ inputs.machine_id }}" >> "$GITHUB_ENV"
+          echo "SESSION=${{ inputs.session_id }}" >> "$GITHUB_ENV"
+          echo "Cloud PC ${{ inputs.machine_id }} iniciando (job ${{ github.run_id }})"
 
-      - name: Simulate Windows 10 boot
+      - name: Registrar STARTING
         run: |
-          echo "STATE=BOOTING_WINDOWS" >> "$GITHUB_STEP_SUMMARY"
-          echo "Windows 10 interface simulation is booting (no real Windows installation is used)."
-          sleep 4
-          echo "Windows 10 simulated shell loaded."
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "content-type: application/json" \
+            -H "x-cloudpc-secret: $CALLBACK_SECRET" \
+            -d "{\"machine_name\":\"$MACHINE\",\"session_id\":\"$SESSION\",\"status\":\"STARTING\",\"message\":\"$MACHINE está iniciando...\",\"run_id\":\"${{ github.run_id }}\",\"job_id\":\"${{ github.job }}-${{ github.run_number }}\",\"run_url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"job_status\":\"RUNNING\"}"
+        env:
+          CALLBACK_URL: ${{ secrets.CLOUD_PC_CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CLOUD_PC_CALLBACK_SECRET }}
 
-      - name: Mark machine ready
+      - name: Registrar BOOTING_WINDOWS
         run: |
-          echo "STATE=READY" >> "$GITHUB_STEP_SUMMARY"
-          echo "${MACHINE_ID} is ready for ${GAME_ID}."
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "content-type: application/json" \
+            -H "x-cloudpc-secret: $CALLBACK_SECRET" \
+            -d "{\"machine_name\":\"$MACHINE\",\"session_id\":\"$SESSION\",\"status\":\"BOOTING_WINDOWS\",\"message\":\"Inicializando Windows 10...\"}"
+          sleep 6
+        env:
+          CALLBACK_URL: ${{ secrets.CLOUD_PC_CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CLOUD_PC_CALLBACK_SECRET }}
 
-      - name: Run simulated session and telemetry
-        shell: bash
+      - name: Registrar READY
         run: |
-          echo "STATE=GAMING" >> "$GITHUB_STEP_SUMMARY"
-          duration="${DURATION:-60}"
-          elapsed=0
-          while [ "$elapsed" -lt "$duration" ]; do
-            fps=$((58 + RANDOM % 5))
-            cpu=$((20 + RANDOM % 45))
-            gpu=$((45 + RANDOM % 40))
-            ram=$((35 + RANDOM % 30))
-            ping=$((28 + RANDOM % 35))
-            echo "telemetry machine=${MACHINE_ID} session=${SESSION_ID} fps=${fps} cpu=${cpu}% gpu=${gpu}% ram=${ram}% ping=${ping}ms"
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "content-type: application/json" \
+            -H "x-cloudpc-secret: $CALLBACK_SECRET" \
+            -d "{\"machine_name\":\"$MACHINE\",\"session_id\":\"$SESSION\",\"status\":\"READY\",\"message\":\"Windows 10 carregado. Máquina pronta.\"}"
+        env:
+          CALLBACK_URL: ${{ secrets.CLOUD_PC_CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CLOUD_PC_CALLBACK_SECRET }}
+
+      - name: Executar sessão simulada e enviar métricas
+        run: |
+          DURATION="${{ inputs.duration }}"
+          ELAPSED=0
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "content-type: application/json" \
+            -H "x-cloudpc-secret: $CALLBACK_SECRET" \
+            -d "{\"machine_name\":\"$MACHINE\",\"session_id\":\"$SESSION\",\"status\":\"GAMING\",\"message\":\"Executando ${{ inputs.game_id }}\"}"
+          while [ "$ELAPSED" -lt "$DURATION" ]; do
+            FPS=$((55 + RANDOM % 15))
+            CPU=$((30 + RANDOM % 50))
+            GPU=$((45 + RANDOM % 50))
+            RAM=$((35 + RANDOM % 40))
+            PING=$((18 + RANDOM % 40))
+            curl -sS -X POST "$CALLBACK_URL" \
+              -H "content-type: application/json" \
+              -H "x-cloudpc-secret: $CALLBACK_SECRET" \
+              -d "{\"machine_name\":\"$MACHINE\",\"session_id\":\"$SESSION\",\"status\":\"GAMING\",\"message\":\"Sessão em andamento\",\"metrics\":{\"fps\":$FPS,\"cpu\":$CPU,\"gpu\":$GPU,\"ram\":$RAM,\"ping\":$PING}}"
             sleep 10
-            elapsed=$((elapsed + 10))
+            ELAPSED=$((ELAPSED + 10))
           done
+        env:
+          CALLBACK_URL: ${{ secrets.CLOUD_PC_CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CLOUD_PC_CALLBACK_SECRET }}
 
-      - name: Stop and release simulated machine
+      - name: Encerrar sessão (STOPPING)
         if: always()
         run: |
-          echo "STATE=STOPPING" >> "$GITHUB_STEP_SUMMARY"
-          echo "${MACHINE_ID} session ${SESSION_ID} stopping."
-          sleep 2
-          echo "STATE=AVAILABLE" >> "$GITHUB_STEP_SUMMARY"
-          echo "${MACHINE_ID} released."
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "content-type: application/json" \
+            -H "x-cloudpc-secret: $CALLBACK_SECRET" \
+            -d "{\"machine_name\":\"$MACHINE\",\"session_id\":\"$SESSION\",\"status\":\"STOPPING\",\"message\":\"Encerrando sessão...\"}"
+        env:
+          CALLBACK_URL: ${{ secrets.CLOUD_PC_CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CLOUD_PC_CALLBACK_SECRET }}
+
+      - name: Liberar máquina (AVAILABLE)
+        if: always()
+        run: |
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "content-type: application/json" \
+            -H "x-cloudpc-secret: $CALLBACK_SECRET" \
+            -d "{\"machine_name\":\"$MACHINE\",\"session_id\":\"$SESSION\",\"status\":\"AVAILABLE\",\"message\":\"Máquina liberada.\",\"job_status\":\"COMPLETED\"}"
+        env:
+          CALLBACK_URL: ${{ secrets.CLOUD_PC_CALLBACK_URL }}
+          CALLBACK_SECRET: ${{ secrets.CLOUD_PC_CALLBACK_SECRET }}
