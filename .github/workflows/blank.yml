@@ -89,7 +89,7 @@ jobs:
           Expand-Archive -Path "$env:TEMP\ffmpeg.zip" -DestinationPath "$env:TEMP\ffmpeg-bin" -Force
           $ffmpeg = Get-ChildItem "$env:TEMP\ffmpeg-bin" -Filter ffmpeg.exe -Recurse | Select-Object -First 1 -ExpandProperty FullName
           Start-Process -FilePath python -ArgumentList "-m http.server 8090 --directory $streamDir" -WindowStyle Hidden
-          $ffmpegArgs = "-f gdigrab -framerate 15 -draw_mouse 0 -i desktop -an -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -f hls -hls_time 1 -hls_list_size 4 -hls_flags delete_segments+append_list $streamDir\stream.m3u8"
+          $ffmpegArgs = "-y -loglevel warning -f gdigrab -framerate 15 -draw_mouse 0 -i desktop -an -c:v libx264 -preset ultrafast -tune zerolatency -g 15 -pix_fmt yuv420p -f hls -hls_time 1 -hls_list_size 4 -hls_flags delete_segments+append_list $streamDir\stream.m3u8"
           $ffmpegProcess = Start-Process -FilePath $ffmpeg -ArgumentList $ffmpegArgs -WindowStyle Hidden -PassThru -RedirectStandardError "$streamDir\ffmpeg.log"
           Start-Sleep -Seconds 5
           if ($ffmpegProcess.HasExited) { Get-Content "$streamDir\ffmpeg.log"; throw "FFmpeg exited before producing HLS" }
@@ -103,7 +103,7 @@ jobs:
           $minutes = [int]"${{ inputs.duration_minutes }}"
           Write-Host "Cloud PC active for $minutes minutes"
           Start-Sleep -Seconds 8
-          if (-not (Test-Path "C:\cloud-view\stream.m3u8")) { throw "HLS stream was not created" }
+          if (-not (Test-Path "C:\cloud-view\stream.m3u8")) { Get-Content "C:\cloud-view\ffmpeg.log" -ErrorAction SilentlyContinue; throw "HLS stream was not created" }
           Start-Sleep -Seconds ($minutes * 60)
 
       - name: Remove RDP access
