@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       duration_minutes:
-        description: "Duração máxima da sessão (15 a 360 minutos)"
+        description: "Duração máxima da sessão (1 a 360 minutos)"
         required: true
-        default: "120"
+        default: "1"
         type: string
       session_id:
         description: "ID externo da sessão"
@@ -25,7 +25,7 @@ jobs:
         shell: pwsh
         run: |
           $minutes = [int]"${{ inputs.duration_minutes }}"
-          if ($minutes -lt 15 -or $minutes -gt 360) { throw "duration_minutes must be between 15 and 360" }
+          if ($minutes -lt 1 -or $minutes -gt 360) { throw "duration_minutes must be between 1 and 360" }
           "SESSION_ID=${{ inputs.session_id }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Configure Remote Desktop with NLA
