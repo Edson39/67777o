@@ -77,11 +77,29 @@ jobs:
           Write-Host "Session $env:SESSION_ID ready on private Tailscale network"
           Write-Host "Address: $env:TAILSCALE_IP | Username: RDP"
 
+      - name: Start private HLS screen stream
+        shell: pwsh
+        run: |
+          $streamDir = "C:\cloud-view"
+          New-Item -ItemType Directory -Force -Path $streamDir | Out-Null
+          netsh advfirewall firewall delete rule name="CloudView-HLS" | Out-Null
+          netsh advfirewall firewall add rule name="CloudView-HLS" dir=in action=allow protocol=TCP localport=8090 remoteip=100.64.0.0/10 profile=any
+          $ffmpeg = "$env:TEMP\ffmpeg.exe"
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "$env:TEMP\ffmpeg.zip"
+          Expand-Archive -Path "$env:TEMP\ffmpeg.zip" -DestinationPath "$env:TEMP\ffmpeg-bin" -Force
+          $ffmpeg = Get-ChildItem "$env:TEMP\ffmpeg-bin" -Filter ffmpeg.exe -Recurse | Select-Object -First 1 -ExpandProperty FullName
+          Start-Process -FilePath python -ArgumentList "-m http.server 8090 --directory $streamDir" -WindowStyle Hidden
+          Start-Process -FilePath $ffmpeg -ArgumentList "-f gdigrab -framerate 15 -i desktop -an -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -f hls -hls_time 1 -hls_list_size 4 -hls_flags delete_segments+append_list $streamDir\stream.m3u8" -WindowStyle Hidden
+          Write-Host "VIDEO_STREAM_URL=http://$env:TAILSCALE_IP:8090/stream.m3u8"
+          "VIDEO_STREAM_URL=http://$env:TAILSCALE_IP:8090/stream.m3u8" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Keep session active
         shell: pwsh
         run: |
           $minutes = [int]"${{ inputs.duration_minutes }}"
           Write-Host "Cloud PC active for $minutes minutes"
+          Start-Sleep -Seconds 8
+          if (-not (Test-Path "C:\cloud-view\stream.m3u8")) { throw "HLS stream was not created" }
           Start-Sleep -Seconds ($minutes * 60)
 
       - name: Remove RDP access
@@ -90,4 +108,6 @@ jobs:
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 1 -Force
           netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
+          netsh advfirewall firewall delete rule name="CloudView-HLS" | Out-Null
+          Get-Process ffmpeg,python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           Remove-LocalUser -Name "RDP" -ErrorAction SilentlyContinue
