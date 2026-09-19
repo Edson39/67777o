@@ -89,9 +89,13 @@ jobs:
           Expand-Archive -Path "$env:TEMP\ffmpeg.zip" -DestinationPath "$env:TEMP\ffmpeg-bin" -Force
           $ffmpeg = Get-ChildItem "$env:TEMP\ffmpeg-bin" -Filter ffmpeg.exe -Recurse | Select-Object -First 1 -ExpandProperty FullName
           Start-Process -FilePath python -ArgumentList "-m http.server 8090 --directory $streamDir" -WindowStyle Hidden
-          Start-Process -FilePath $ffmpeg -ArgumentList "-f gdigrab -framerate 15 -i desktop -an -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -f hls -hls_time 1 -hls_list_size 4 -hls_flags delete_segments+append_list $streamDir\stream.m3u8" -WindowStyle Hidden
-          Write-Host "VIDEO_STREAM_URL=http://$env:TAILSCALE_IP:8090/stream.m3u8"
-          "VIDEO_STREAM_URL=http://$env:TAILSCALE_IP:8090/stream.m3u8" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $ffmpegArgs = "-f gdigrab -framerate 15 -draw_mouse 0 -i desktop -an -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -f hls -hls_time 1 -hls_list_size 4 -hls_flags delete_segments+append_list $streamDir\stream.m3u8"
+          $ffmpegProcess = Start-Process -FilePath $ffmpeg -ArgumentList $ffmpegArgs -WindowStyle Hidden -PassThru -RedirectStandardError "$streamDir\ffmpeg.log"
+          Start-Sleep -Seconds 5
+          if ($ffmpegProcess.HasExited) { Get-Content "$streamDir\ffmpeg.log"; throw "FFmpeg exited before producing HLS" }
+          $streamUrl = "http://${env:TAILSCALE_IP}:8090/stream.m3u8"
+          Write-Host "VIDEO_STREAM_URL=$streamUrl"
+          "VIDEO_STREAM_URL=$streamUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Keep session active
         shell: pwsh
