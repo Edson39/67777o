@@ -1,66 +1,92 @@
-name: Windows AnyDesk & Tailscale Runner
+name: Windows RDP via Tailscale
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  rdp:
     runs-on: windows-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Conectar ao Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          args: --accept-routes
 
-    - name: Conectar ao Tailscale
-      uses: tailscale/github-action@v3
-      with:
-        authkey: ${{ secrets.TS_AUTHKEY }}
-        args: --accept-routes
+      - name: Configurar usuário RDP
+        shell: powershell
+        env:
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
 
-    - name: Instalar e Configurar AnyDesk
-      shell: powershell
-      run: |
-        Write-Host "Baixando AnyDesk..."
-        Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
-        
-        Write-Host "Instalando AnyDesk..."
-        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"C:\Program Files (x86)\AnyDesk`" --silent" -Wait
-        
-        Write-Host "Configurando Acesso Nao Supervisionado..."
-        cmd.exe /c "echo SuaSenhaForte123! | `"C:\Program Files (x86)\AnyDesk\AnyDesk.exe`" --set-password"
-        
-        Restart-Service -Name "AnyDesk" -Force
-        Start-Sleep -Seconds 10
+          $username = "rdpuser"
+          $password = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
 
-    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
-      shell: powershell
-      run: |
-        $ErrorActionPreference = 'SilentlyContinue'
+          $user = Get-LocalUser -Name $username -ErrorAction SilentlyContinue
 
-        Write-Host "Instalando Discord..."
-        winget install --id Discord.Discord --silent --accept-source-agreements --accept-package-agreements
+          if ($null -eq $user) {
+              New-LocalUser `
+                -Name $username `
+                -Password $password `
+                -Description "Conta para acesso RDP" `
+                -PasswordNeverExpires
+          }
+          else {
+              Set-LocalUser -Name $username -Password $password
+          }
 
-        Write-Host "Instalando Steam..."
-        winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
+          Add-LocalGroupMember `
+            -Group "Remote Desktop Users" `
+            -Member $username `
+            -ErrorAction SilentlyContinue
 
-        Write-Host "Instalando Roblox Player..."
-        winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
+          Add-LocalGroupMember `
+            -Group "Administrators" `
+            -Member $username `
+            -ErrorAction SilentlyContinue
 
-        Write-Host "Instalando Bloxstrap..."
-        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
+          Write-Host "Usuário RDP configurado: $username"
 
-        Write-Host "Instalações concluídas!"
+      - name: Ativar RDP
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
 
-    - name: Configurar Senha do Windows e RDP
-      shell: powershell
-      run: |
-        $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
-        Set-LocalUser -Name "runneradmin" -Password $password
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
+            -Name "fDenyTSConnections" `
+            -Value 0
 
-    - name: Manter Runner Ativo
-      shell: powershell
-      run: |
-        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
-        Start-Sleep -Seconds 21600
+          Set-ItemProperty `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
+            -Name "UserAuthentication" `
+            -Value 1
+
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+          Restart-Service TermService -Force
+
+          Write-Host "RDP ativado."
+
+      - name: Mostrar IP do Tailscale
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 5
+
+          Write-Host "===== TAILSCALE ====="
+          tailscale status
+          Write-Host "====================="
+
+          $ip = tailscale ip -4
+          Write-Host "IP Tailscale: $ip"
+          Write-Host "Usuário RDP: rdpuser"
+
+      - name: Manter computador ativo
+        shell: powershell
+        run: |
+          Write-Host "RDP pronto."
+          Write-Host "A máquina ficará ativa enquanto este job estiver executando."
+
+          Start-Sleep -Seconds 21600
