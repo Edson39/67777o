@@ -1,126 +1,62 @@
-name: Cloud PC RDP
+name: Windows RDP via Tailscale
 
 on:
   workflow_dispatch:
-    inputs:
-      duration_minutes:
-        description: "Duração máxima da sessão (1 a 360 minutos)"
-        required: true
-        default: "1"
-        type: string
-      session_id:
-        description: "ID externo da sessão"
-        required: true
-        type: string
-
-permissions:
-  contents: read
 
 jobs:
-  secure-rdp:
+  rdp:
     runs-on: windows-latest
     timeout-minutes: 360
+
     steps:
-      - name: Validate session duration
-        shell: pwsh
-        run: |
-          $minutes = [int]"${{ inputs.duration_minutes }}"
-          if ($minutes -lt 1 -or $minutes -gt 360) { throw "duration_minutes must be between 1 and 360" }
-          "SESSION_ID=${{ inputs.session_id }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Configure Remote Desktop with NLA
-        shell: pwsh
-        run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 1 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'SecurityLayer' -Value 2 -Force
-          netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
-          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389 remoteip=100.64.0.0/10 profile=any
-          Restart-Service -Name TermService -Force
-
-      - name: Create restricted RDP user
-        shell: pwsh
-        run: |
-          $chars = ([char[]](65..90) + [char[]](97..122) + [char[]](48..57) + [char[]](33..47))
-          $password = -join (1..24 | ForEach-Object { $chars | Get-Random })
-          $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-          if (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue) { Set-LocalUser -Name "RDP" -Password $securePassword } else { New-LocalUser -Name "RDP" -Password $securePassword -AccountNeverExpires }
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP" -ErrorAction SilentlyContinue
-          "::add-mask::$password"
-          "RDP_PASSWORD=$password" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Install Tailscale
-        shell: pwsh
-        run: |
-          $installer = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi" -OutFile $installer
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installer`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installer -Force
-
-      - name: Join private Tailscale network
-        shell: pwsh
+      - name: Configurar usuário RDP
+        shell: powershell
         env:
-          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:TAILSCALE_AUTH_KEY)) { throw "TAILSCALE_AUTH_KEY is required" }
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$env:TAILSCALE_AUTH_KEY --hostname="gh-cloud-pc-$env:GITHUB_RUN_ID" --accept-routes
-          $tsIP = $null
-          for ($i = 0; $i -lt 20 -and -not $tsIP; $i++) { $tsIP = (& "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4).Trim(); if (-not $tsIP) { Start-Sleep -Seconds 3 } }
-          if (-not $tsIP) { throw "Tailscale IP was not assigned" }
-          "TAILSCALE_IP=$tsIP" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $password = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
 
-      - name: Verify private RDP access
-        shell: pwsh
+          if (-not (Get-LocalUser -Name "Edson" -ErrorAction SilentlyContinue)) {
+              New-LocalUser -Name "Edson" -Password $password -PasswordNeverExpires
+          } else {
+              Set-LocalUser -Name "Edson" -Password $password
+          }
+
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Edson"
+
+          Set-ItemProperty `
+            -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+            -Name "fDenyTSConnections" `
+            -Value 0
+
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+      - name: Instalar Tailscale
+        shell: powershell
         run: |
-          $result = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389 -WarningAction SilentlyContinue
-          if (-not $result.TcpTestSucceeded) { throw "RDP is not reachable over Tailscale" }
-          Write-Host "Session $env:SESSION_ID ready on private Tailscale network"
-          Write-Host "Address: $env:TAILSCALE_IP | Username: RDP"
+          winget install --id Tailscale.Tailscale `
+            --silent `
+            --accept-package-agreements `
+            --accept-source-agreements
 
-      - name: Start private HLS screen stream
-        shell: pwsh
+      - name: Conectar ao Tailscale
+        shell: powershell
         env:
-          CLOUD_PC_CALLBACK_URL: ${{ secrets.CLOUD_PC_CALLBACK_URL }}
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
         run: |
-          $streamDir = "C:\cloud-view"
-          New-Item -ItemType Directory -Force -Path $streamDir | Out-Null
-          netsh advfirewall firewall delete rule name="CloudView-HLS" | Out-Null
-          netsh advfirewall firewall add rule name="CloudView-HLS" dir=in action=allow protocol=TCP localport=8090 remoteip=100.64.0.0/10 profile=any
-          $ffmpeg = "$env:TEMP\ffmpeg.exe"
-          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "$env:TEMP\ffmpeg.zip"
-          Expand-Archive -Path "$env:TEMP\ffmpeg.zip" -DestinationPath "$env:TEMP\ffmpeg-bin" -Force
-          $ffmpeg = Get-ChildItem "$env:TEMP\ffmpeg-bin" -Filter ffmpeg.exe -Recurse | Select-Object -First 1 -ExpandProperty FullName
-          Start-Process -FilePath python -ArgumentList "-m http.server 8090 --directory $streamDir" -WindowStyle Hidden
-          $ffmpegArgs = "-y -loglevel warning -f gdigrab -framerate 15 -draw_mouse 0 -i desktop -an -c:v libx264 -preset ultrafast -tune zerolatency -g 15 -pix_fmt yuv420p -f hls -hls_time 1 -hls_list_size 4 -hls_flags delete_segments+append_list $streamDir\stream.m3u8"
-          $ffmpegProcess = Start-Process -FilePath $ffmpeg -ArgumentList $ffmpegArgs -WindowStyle Hidden -PassThru -RedirectStandardError "$streamDir\ffmpeg.log"
-          Start-Sleep -Seconds 5
-          if ($ffmpegProcess.HasExited) { Get-Content "$streamDir\ffmpeg.log"; throw "FFmpeg exited before producing HLS" }
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" serve --bg --https=443 http://127.0.0.1:8090
-          $dnsName = (& "$env:ProgramFiles\Tailscale\tailscale.exe" dns-name).Trim().TrimEnd('.')
-          if ([string]::IsNullOrWhiteSpace($dnsName)) { throw "Tailscale DNS name was not available" }
-          $streamUrl = "https://${dnsName}/stream.m3u8"
-          Write-Host "VIDEO_STREAM_URL=$streamUrl"
-          "VIDEO_STREAM_URL=$streamUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          if ([string]::IsNullOrWhiteSpace($env:CLOUD_PC_CALLBACK_URL)) { throw "CLOUD_PC_CALLBACK_URL is required" }
-          $payload = @{ session_id = $env:SESSION_ID; stream_url = $streamUrl; message = "Transmissão HLS disponível" } | ConvertTo-Json -Compress
-          Invoke-RestMethod -Uri $env:CLOUD_PC_CALLBACK_URL -Method Post -ContentType "application/json" -Body $payload
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
+            --auth-key="$env:TS_AUTHKEY" `
+            --hostname="github-rdp-edson"
 
-      - name: Keep session active
-        shell: pwsh
+      - name: Mostrar IP do Tailscale
+        shell: powershell
         run: |
-          $minutes = [int]"${{ inputs.duration_minutes }}"
-          Write-Host "Cloud PC active for $minutes minutes"
-          Start-Sleep -Seconds 8
-          if (-not (Test-Path "C:\cloud-view\stream.m3u8")) { Get-Content "C:\cloud-view\ffmpeg.log" -ErrorAction SilentlyContinue; throw "HLS stream was not created" }
-          Start-Sleep -Seconds ($minutes * 60)
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
 
-      - name: Remove RDP access
-        if: always()
-        shell: pwsh
+      - name: Manter runner ativo
+        shell: powershell
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 1 -Force
-          netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
-          netsh advfirewall firewall delete rule name="CloudView-HLS" | Out-Null
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" serve reset | Out-Null
-          Get-Process ffmpeg,python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Remove-LocalUser -Name "RDP" -ErrorAction SilentlyContinue
+          Write-Host "RDP ativo."
+          Write-Host "Usuário: Edson"
+          Write-Host "Conecte usando o IP Tailscale mostrado acima."
+          Start-Sleep -Seconds 21600
