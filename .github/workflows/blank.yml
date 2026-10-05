@@ -12,17 +12,16 @@ jobs:
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
-          args: --accept-routes
 
-      - name: Configurar usuário RDP
+      - name: Criar usuário RDP
         shell: powershell
-        env:
-          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          $ErrorActionPreference = "Stop"
+          # ===== CONFIGURAÇÃO =====
+          $username = "Edson"
+          $passwordPlain = "SuaSenhaForte123"
+          # ========================
 
-          $username = "rdpuser"
-          $password = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
+          $password = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
 
           $user = Get-LocalUser -Name $username -ErrorAction SilentlyContinue
 
@@ -30,10 +29,9 @@ jobs:
               New-LocalUser `
                 -Name $username `
                 -Password $password `
-                -Description "Conta para acesso RDP" `
-                -PasswordNeverExpires
-          }
-          else {
+                -PasswordNeverExpires `
+                -Description "Usuário RDP"
+          } else {
               Set-LocalUser -Name $username -Password $password
           }
 
@@ -42,51 +40,31 @@ jobs:
             -Member $username `
             -ErrorAction SilentlyContinue
 
-          Add-LocalGroupMember `
-            -Group "Administrators" `
-            -Member $username `
-            -ErrorAction SilentlyContinue
-
-          Write-Host "Usuário RDP configurado: $username"
-
       - name: Ativar RDP
         shell: powershell
         run: |
-          $ErrorActionPreference = "Stop"
-
           Set-ItemProperty `
             -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
             -Name "fDenyTSConnections" `
             -Value 0
 
-          Set-ItemProperty `
-            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
-            -Name "UserAuthentication" `
-            -Value 1
-
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
           Restart-Service TermService -Force
 
-          Write-Host "RDP ativado."
-
-      - name: Mostrar IP do Tailscale
+      - name: Mostrar IP Tailscale
         shell: powershell
         run: |
           Start-Sleep -Seconds 5
 
-          Write-Host "===== TAILSCALE ====="
-          tailscale status
-          Write-Host "====================="
+          Write-Host "===== DADOS DO RDP ====="
+          Write-Host "Usuário: Edson"
+          Write-Host "IP Tailscale:"
+          tailscale ip -4
+          Write-Host "========================"
 
-          $ip = tailscale ip -4
-          Write-Host "IP Tailscale: $ip"
-          Write-Host "Usuário RDP: rdpuser"
-
-      - name: Manter computador ativo
+      - name: Manter runner ativo
         shell: powershell
         run: |
           Write-Host "RDP pronto."
-          Write-Host "A máquina ficará ativa enquanto este job estiver executando."
-
           Start-Sleep -Seconds 21600
