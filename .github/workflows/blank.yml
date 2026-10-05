@@ -1,4 +1,4 @@
-name: RDP Teste
+name: RDP Windows + Tailscale
 
 on:
   workflow_dispatch:
@@ -6,65 +6,100 @@ on:
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 360
 
     steps:
-      - name: Diagnosticar Windows
-        shell: powershell
-        run: |
-          Write-Host "Windows:"
-          systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
-
-          Write-Host ""
-          Write-Host "Usuario atual:"
-          whoami
-
-          Write-Host ""
-          Write-Host "Testando PowerShell:"
-          $PSVersionTable.PSVersion
-
-      - name: Criar usuario Edson
+      - name: Configurar usuário
         shell: powershell
         env:
           RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          try {
-              $ErrorActionPreference = "Stop"
+          $ErrorActionPreference = "Stop"
 
-              Write-Host "Verificando usuario..."
+          $pass = ConvertTo-SecureString `
+            $env:RDP_PASSWORD -AsPlainText -Force
 
-              $user = Get-LocalUser -Name "Edson" -ErrorAction SilentlyContinue
+          $user = Get-LocalUser -Name "Edson" -ErrorAction SilentlyContinue
 
-              if ($null -eq $user) {
-                  Write-Host "Criando Edson..."
-                  $pass = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
-                  New-LocalUser -Name "Edson" -Password $pass
-              } else {
-                  Write-Host "Edson ja existe."
-              }
-
-              Write-Host "OK"
-          }
-          catch {
-              Write-Host "ERRO:"
-              Write-Host $_
-              exit 0
+          if ($null -eq $user) {
+              New-LocalUser `
+                -Name "Edson" `
+                -Password $pass `
+                -PasswordNeverExpires
+          } else {
+              Set-LocalUser `
+                -Name "Edson" `
+                -Password $pass
           }
 
-      - name: Testar RDP
+          Add-LocalGroupMember `
+            -Group "Remote Desktop Users" `
+            -Member "Edson" `
+            -ErrorAction SilentlyContinue
+
+          Write-Host "Usuario configurado."
+
+      - name: Habilitar RDP
         shell: powershell
         run: |
-          Write-Host "Habilitando RDP..."
-
           Set-ItemProperty `
             -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
             -Name "fDenyTSConnections" `
             -Value 0
 
-          Write-Host "Configuracao concluida."
+          Enable-NetFirewallRule `
+            -DisplayGroup "Remote Desktop"
 
-      - name: Final
+          Write-Host "RDP habilitado."
+
+      - name: Instalar Tailscale
         shell: powershell
         run: |
-          Write-Host "TESTE TERMINADO"
-          Start-Sleep -Seconds 60
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $file = "$env:TEMP\tailscale.msi"
+
+          Invoke-WebRequest -Uri $url -OutFile $file
+
+          Start-Process msiexec.exe `
+            -ArgumentList "/i `"$file`" /qn /norestart" `
+            -Wait
+
+          Write-Host "Tailscale instalado."
+
+      - name: Conectar Tailscale
+        shell: powershell
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        run: |
+          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
+
+          & $ts up `
+            --auth-key="$env:TS_AUTHKEY" `
+            --hostname="github-rdp-edson"
+
+          Start-Sleep -Seconds 5
+
+          Write-Host "================================"
+          Write-Host "IP TAILSCALE:"
+          & $ts ip -4
+          Write-Host "================================"
+
+      - name: Verificar RDP
+        shell: powershell
+        run: |
+          Write-Host "Porta RDP:"
+          Get-NetTCPConnection -LocalPort 3389 -ErrorAction SilentlyContinue
+
+          Write-Host ""
+          Write-Host "RDP ONLINE"
+
+      - name: Manter runner ativo
+        shell: powershell
+        run: |
+          Write-Host "================================"
+          Write-Host "WINDOWS RDP ONLINE"
+          Write-Host "Usuario: Edson"
+          Write-Host "Tempo maximo: 6 horas"
+          Write-Host "================================"
+
+          Start-Sleep -Seconds 21600
