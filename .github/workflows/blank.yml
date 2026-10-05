@@ -1,4 +1,4 @@
-name: Windows RDP Tailscale
+name: Windows RDP - Tailscale
 
 on:
   workflow_dispatch:
@@ -16,39 +16,51 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $password = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
+          $password = ConvertTo-SecureString `
+            $env:RDP_PASSWORD `
+            -AsPlainText `
+            -Force
 
           $user = Get-LocalUser -Name "Edson" -ErrorAction SilentlyContinue
 
           if ($null -eq $user) {
-              New-LocalUser "Edson" -Password $password -PasswordNeverExpires
+            New-LocalUser `
+              -Name "Edson" `
+              -Password $password `
+              -PasswordNeverExpires
           } else {
-              Set-LocalUser "Edson" -Password $password
+            Set-LocalUser `
+              -Name "Edson" `
+              -Password $password
           }
 
-          Add-LocalGroupMember "Remote Desktop Users" "Edson" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember `
+            -Group "Remote Desktop Users" `
+            -Member "Edson" `
+            -ErrorAction SilentlyContinue
 
           Set-ItemProperty `
-            "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
-            -Name fDenyTSConnections `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
+            -Name "fDenyTSConnections" `
             -Value 0
 
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Enable-NetFirewallRule `
+            -DisplayGroup "Remote Desktop"
 
-          Write-Host "RDP configurado!"
+          Write-Host "RDP configurado."
 
-      - name: Baixar Tailscale
+      - name: Instalar Tailscale
         shell: powershell
         run: |
           Invoke-WebRequest `
-            -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
+            "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
             -OutFile "$env:TEMP\tailscale.msi"
 
           Start-Process msiexec.exe `
             -ArgumentList "/i `"$env:TEMP\tailscale.msi`" /qn /norestart" `
             -Wait
 
-      - name: Conectar Tailscale
+      - name: Conectar ao Tailscale
         shell: powershell
         env:
           TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
@@ -62,8 +74,12 @@ jobs:
           Write-Host "IP Tailscale:"
           & $ts ip -4
 
-      - name: Manter ativo
+      - name: Manter runner ativo
         shell: powershell
         run: |
-          Write-Host "RDP pronto."
+          Write-Host "================================"
+          Write-Host "RDP ONLINE"
+          Write-Host "Usuario: Edson"
+          Write-Host "================================"
+
           Start-Sleep -Seconds 21600
