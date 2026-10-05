@@ -1,44 +1,61 @@
-name: Windows RDP via Tailscale
+name: Windows RDP + Tailscale
 
 on:
   workflow_dispatch:
 
 jobs:
-  rdp:
+  windows:
     runs-on: windows-latest
 
     steps:
+
       - name: Conectar ao Tailscale
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
 
-      - name: Criar usuário RDP
+      - name: Criar administrador Edson
         shell: powershell
         run: |
-          # ===== CONFIGURAÇÃO =====
           $username = "Edson"
-          $passwordPlain = "SuaSenhaForte123"
-          # ========================
+          $passwordPlain = "Samara2001"
 
-          $password = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
+          $password = ConvertTo-SecureString `
+            $passwordPlain `
+            -AsPlainText `
+            -Force
 
-          $user = Get-LocalUser -Name $username -ErrorAction SilentlyContinue
+          $user = Get-LocalUser `
+            -Name $username `
+            -ErrorAction SilentlyContinue
 
           if ($null -eq $user) {
               New-LocalUser `
                 -Name $username `
                 -Password $password `
                 -PasswordNeverExpires `
-                -Description "Usuário RDP"
-          } else {
-              Set-LocalUser -Name $username -Password $password
+                -UserMayNotChangePassword:$false
+          }
+          else {
+              Set-LocalUser `
+                -Name $username `
+                -Password $password
           }
 
+          # Administrador
+          Add-LocalGroupMember `
+            -Group "Administrators" `
+            -Member $username `
+            -ErrorAction SilentlyContinue
+
+          # Permitir RDP
           Add-LocalGroupMember `
             -Group "Remote Desktop Users" `
             -Member $username `
             -ErrorAction SilentlyContinue
+
+          Write-Host "Usuário criado: $username"
+          Write-Host "Usuário configurado como administrador."
 
       - name: Ativar RDP
         shell: powershell
@@ -48,23 +65,35 @@ jobs:
             -Name "fDenyTSConnections" `
             -Value 0
 
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
+            -Name "UserAuthentication" `
+            -Value 1
+
+          Enable-NetFirewallRule `
+            -DisplayGroup "Remote Desktop"
 
           Restart-Service TermService -Force
 
-      - name: Mostrar IP Tailscale
+          Write-Host "RDP ativado."
+
+      - name: Mostrar dados da conexão
         shell: powershell
         run: |
           Start-Sleep -Seconds 5
 
-          Write-Host "===== DADOS DO RDP ====="
-          Write-Host "Usuário: Edson"
-          Write-Host "IP Tailscale:"
-          tailscale ip -4
-          Write-Host "========================"
+          $ip = tailscale ip -4
 
-      - name: Manter runner ativo
+          Write-Host ""
+          Write-Host "=============================="
+          Write-Host "        RDP PRONTO"
+          Write-Host "=============================="
+          Write-Host "IP Tailscale: $ip"
+          Write-Host "Usuário: .\Edson"
+          Write-Host "=============================="
+
+      - name: Manter computador ativo
         shell: powershell
         run: |
-          Write-Host "RDP pronto."
+          Write-Host "Runner ativo."
           Start-Sleep -Seconds 21600
