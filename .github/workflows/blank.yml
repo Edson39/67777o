@@ -1,4 +1,4 @@
-name: Windows RDP - Tailscale
+name: RDP Teste
 
 on:
   workflow_dispatch:
@@ -6,80 +6,65 @@ on:
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 30
 
     steps:
-      - name: Configurar RDP
+      - name: Diagnosticar Windows
+        shell: powershell
+        run: |
+          Write-Host "Windows:"
+          systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
+
+          Write-Host ""
+          Write-Host "Usuario atual:"
+          whoami
+
+          Write-Host ""
+          Write-Host "Testando PowerShell:"
+          $PSVersionTable.PSVersion
+
+      - name: Criar usuario Edson
         shell: powershell
         env:
           RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          $ErrorActionPreference = "Stop"
+          try {
+              $ErrorActionPreference = "Stop"
 
-          $password = ConvertTo-SecureString `
-            $env:RDP_PASSWORD `
-            -AsPlainText `
-            -Force
+              Write-Host "Verificando usuario..."
 
-          $user = Get-LocalUser -Name "Edson" -ErrorAction SilentlyContinue
+              $user = Get-LocalUser -Name "Edson" -ErrorAction SilentlyContinue
 
-          if ($null -eq $user) {
-            New-LocalUser `
-              -Name "Edson" `
-              -Password $password `
-              -PasswordNeverExpires
-          } else {
-            Set-LocalUser `
-              -Name "Edson" `
-              -Password $password
+              if ($null -eq $user) {
+                  Write-Host "Criando Edson..."
+                  $pass = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
+                  New-LocalUser -Name "Edson" -Password $pass
+              } else {
+                  Write-Host "Edson ja existe."
+              }
+
+              Write-Host "OK"
+          }
+          catch {
+              Write-Host "ERRO:"
+              Write-Host $_
+              exit 0
           }
 
-          Add-LocalGroupMember `
-            -Group "Remote Desktop Users" `
-            -Member "Edson" `
-            -ErrorAction SilentlyContinue
+      - name: Testar RDP
+        shell: powershell
+        run: |
+          Write-Host "Habilitando RDP..."
 
           Set-ItemProperty `
             -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
             -Name "fDenyTSConnections" `
             -Value 0
 
-          Enable-NetFirewallRule `
-            -DisplayGroup "Remote Desktop"
+          Write-Host "Configuracao concluida."
 
-          Write-Host "RDP configurado."
-
-      - name: Instalar Tailscale
+      - name: Final
         shell: powershell
         run: |
-          Invoke-WebRequest `
-            "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
-            -OutFile "$env:TEMP\tailscale.msi"
-
-          Start-Process msiexec.exe `
-            -ArgumentList "/i `"$env:TEMP\tailscale.msi`" /qn /norestart" `
-            -Wait
-
-      - name: Conectar ao Tailscale
-        shell: powershell
-        env:
-          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
-        run: |
-          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
-
-          & $ts up `
-            --auth-key="$env:TS_AUTHKEY" `
-            --hostname="github-rdp-edson"
-
-          Write-Host "IP Tailscale:"
-          & $ts ip -4
-
-      - name: Manter runner ativo
-        shell: powershell
-        run: |
-          Write-Host "================================"
-          Write-Host "RDP ONLINE"
-          Write-Host "Usuario: Edson"
-          Write-Host "================================"
-
-          Start-Sleep -Seconds 21600
+          Write-Host "TESTE TERMINADO"
+          Start-Sleep -Seconds 60
