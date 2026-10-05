@@ -1,4 +1,4 @@
-name: RDP Windows + Tailscale
+name: RDP + Tailscale Diagnostico
 
 on:
   workflow_dispatch:
@@ -6,30 +6,24 @@ on:
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 30
 
     steps:
-      - name: Configurar usuário
+      - name: RDP
         shell: powershell
         env:
           RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
           $ErrorActionPreference = "Stop"
 
-          $pass = ConvertTo-SecureString `
-            $env:RDP_PASSWORD -AsPlainText -Force
+          $pass = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
 
           $user = Get-LocalUser -Name "Edson" -ErrorAction SilentlyContinue
 
           if ($null -eq $user) {
-              New-LocalUser `
-                -Name "Edson" `
-                -Password $pass `
-                -PasswordNeverExpires
+            New-LocalUser "Edson" -Password $pass
           } else {
-              Set-LocalUser `
-                -Name "Edson" `
-                -Password $pass
+            Set-LocalUser "Edson" -Password $pass
           }
 
           Add-LocalGroupMember `
@@ -37,34 +31,64 @@ jobs:
             -Member "Edson" `
             -ErrorAction SilentlyContinue
 
-          Write-Host "Usuario configurado."
-
-      - name: Habilitar RDP
-        shell: powershell
-        run: |
           Set-ItemProperty `
             -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
             -Name "fDenyTSConnections" `
             -Value 0
 
-          Enable-NetFirewallRule `
-            -DisplayGroup "Remote Desktop"
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-          Write-Host "RDP habilitado."
+          Write-Host "RDP OK"
+
+      - name: Baixar Tailscale
+        shell: powershell
+        run: |
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $out = "$env:TEMP\tailscale.msi"
+
+          Write-Host "Baixando Tailscale..."
+
+          Invoke-WebRequest `
+            -Uri $url `
+            -OutFile $out
+
+          Write-Host "Download OK"
+          Write-Host "Arquivo: $out"
 
       - name: Instalar Tailscale
         shell: powershell
         run: |
-          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $ErrorActionPreference = "Stop"
+
           $file = "$env:TEMP\tailscale.msi"
 
-          Invoke-WebRequest -Uri $url -OutFile $file
+          Write-Host "Instalando..."
 
-          Start-Process msiexec.exe `
+          $process = Start-Process `
+            msiexec.exe `
             -ArgumentList "/i `"$file`" /qn /norestart" `
-            -Wait
+            -Wait `
+            -PassThru
 
-          Write-Host "Tailscale instalado."
+          Write-Host "MSI exit code: $($process.ExitCode)"
+
+          if ($process.ExitCode -ne 0) {
+            throw "Instalacao do Tailscale falhou."
+          }
+
+      - name: Verificar Tailscale
+        shell: powershell
+        run: |
+          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
+
+          Write-Host "Procurando:"
+          Write-Host $ts
+
+          if (!(Test-Path $ts)) {
+            throw "tailscale.exe nao foi encontrado."
+          }
+
+          & $ts version
 
       - name: Conectar Tailscale
         shell: powershell
@@ -73,33 +97,21 @@ jobs:
         run: |
           $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
 
+          if ([string]::IsNullOrWhiteSpace($env:TS_AUTHKEY)) {
+            throw "O Secret TS_AUTHKEY esta vazio ou nao existe."
+          }
+
           & $ts up `
             --auth-key="$env:TS_AUTHKEY" `
             --hostname="github-rdp-edson"
 
           Start-Sleep -Seconds 5
 
-          Write-Host "================================"
-          Write-Host "IP TAILSCALE:"
+          Write-Host "IP Tailscale:"
           & $ts ip -4
-          Write-Host "================================"
 
-      - name: Verificar RDP
+      - name: Final
         shell: powershell
         run: |
-          Write-Host "Porta RDP:"
-          Get-NetTCPConnection -LocalPort 3389 -ErrorAction SilentlyContinue
-
-          Write-Host ""
-          Write-Host "RDP ONLINE"
-
-      - name: Manter runner ativo
-        shell: powershell
-        run: |
-          Write-Host "================================"
-          Write-Host "WINDOWS RDP ONLINE"
-          Write-Host "Usuario: Edson"
-          Write-Host "Tempo maximo: 6 horas"
-          Write-Host "================================"
-
-          Start-Sleep -Seconds 21600
+          Write-Host "RDP + Tailscale terminou."
+          Start-Sleep -Seconds 60
