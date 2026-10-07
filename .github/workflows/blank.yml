@@ -2,11 +2,15 @@ name: Windows RDP + Tailscale
 
 on:
   workflow_dispatch:
-
+    inputs:
+      request_id:
+        description: Runner request created by the private dashboard.
+        required: true
+        type: string
 jobs:
   windows:
     runs-on: windows-latest
-
+    timeout-minutes: 360
     steps:
 
       - name: Conectar ao Tailscale
@@ -18,13 +22,17 @@ jobs:
         shell: powershell
         run: |
           $username = "Edson"
-          $passwordPlain = "Samara2001"
-
-          $password = ConvertTo-SecureString `
-            $passwordPlain `
+          $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+'
+          $password = -join (1..32 | ForEach-Object {
+            $alphabet[[System.Security.Cryptography.RandomNumberGenerator]::GetInt32($alphabet.Length)]
+          })
+          Write-Output "::add-mask::$password"
+          $securePassword = ConvertTo-SecureString `
+            -String $password `
             -AsPlainText `
             -Force
-
+          $runnerEnv = "RUNNER_USERNAME=$username`nRUNNER_PASSWORD=$password`n"
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, $runnerEnv, [System.Text.UTF8Encoding]::new($false))
           $user = Get-LocalUser `
             -Name $username `
             -ErrorAction SilentlyContinue
@@ -32,14 +40,14 @@ jobs:
           if ($null -eq $user) {
               New-LocalUser `
                 -Name $username `
-                -Password $password `
+                -Password $securePassword `
                 -PasswordNeverExpires `
                 -UserMayNotChangePassword:$false
           }
           else {
               Set-LocalUser `
                 -Name $username `
-                -Password $password
+                -Password $securePassword
           }
 
           # Administrador
@@ -77,21 +85,55 @@ jobs:
 
           Write-Host "RDP ativado."
 
-      - name: Mostrar dados da conexão
+      - name: Enviar credenciais privadas ao painel
         shell: powershell
+        env:
+          RUNNER_REQUEST_ID: ${{ inputs.request_id }}
+          RUNNER_CALLBACK_URL: ${{ secrets.RUNNER_CALLBACK_URL }}
+          RUNNER_CALLBACK_TOKEN: ${{ secrets.RUNNER_CALLBACK_TOKEN }}
         run: |
           Start-Sleep -Seconds 5
-
-          $ip = tailscale ip -4
-
-          Write-Host ""
-          Write-Host "=============================="
-          Write-Host "        RDP PRONTO"
-          Write-Host "=============================="
-          Write-Host "IP Tailscale: $ip"
-          Write-Host "Usuário: .\Edson"
-          Write-Host "=============================="
-
+          $ip = (tailscale ip -4 | Select-Object -First 1).Trim()
+          if ($ip -notmatch '^\d{1,3}(?:\.\d{1,3}){3}      - name: Manter computador ativo
+        shell: powershell
+        run: |
+          Write-Host "Runner ativo."
+          Start-Sleep -Seconds 21600
+) { throw "Tailscale did not return a valid IPv4 address." }
+          if ([string]::IsNullOrWhiteSpace($env:RUNNER_PASSWORD) -or [string]::IsNullOrWhiteSpace($env:RUNNER_USERNAME)) { throw "Runner credentials are unavailable." }
+          if ([string]::IsNullOrWhiteSpace($env:RUNNER_REQUEST_ID) -or [string]::IsNullOrWhiteSpace($env:RUNNER_CALLBACK_URL) -or [string]::IsNullOrWhiteSpace($env:RUNNER_CALLBACK_TOKEN)) { throw "The private callback configuration is missing." }
+          Write-Output "::add-mask::$env:RUNNER_PASSWORD"
+          Write-Output "::add-mask::$env:RUNNER_CALLBACK_TOKEN"
+          $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $readyPayload = @{
+            requestId = $env:RUNNER_REQUEST_ID
+            status = "ready"
+            tailscaleIp = $ip
+            username = ".\$env:RUNNER_USERNAME"
+            password = $env:RUNNER_PASSWORD
+            runId = "$env:GITHUB_RUN_ID"
+            runUrl = $runUrl
+            error = $null
+          } | ConvertTo-Json -Compress
+          try {
+            Invoke-RestMethod -Uri $env:RUNNER_CALLBACK_URL -Method Post -Headers @{ Authorization = "Bearer $env:RUNNER_CALLBACK_TOKEN" } -ContentType "application/json" -Body $readyPayload -TimeoutSec 30 | Out-Null
+          } catch {
+            $failedPayload = @{
+              requestId = $env:RUNNER_REQUEST_ID
+              status = "failed"
+              tailscaleIp = $null
+              username = $null
+              password = $null
+              runId = "$env:GITHUB_RUN_ID"
+              runUrl = $runUrl
+              error = "The runner could not deliver its connection details."
+            } | ConvertTo-Json -Compress
+            try {
+              Invoke-RestMethod -Uri $env:RUNNER_CALLBACK_URL -Method Post -Headers @{ Authorization = "Bearer $env:RUNNER_CALLBACK_TOKEN" } -ContentType "application/json" -Body $failedPayload -TimeoutSec 15 | Out-Null
+            } catch { }
+            throw "Runner details could not be delivered to the private panel."
+          }
+          Write-Host "Connection details sent securely to the private panel."
       - name: Manter computador ativo
         shell: powershell
         run: |
