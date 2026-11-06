@@ -1,141 +1,66 @@
-name: Windows RDP + Tailscale
+name: Windows AnyDesk & Tailscale Runner
 
 on:
   workflow_dispatch:
-    inputs:
-      request_id:
-        description: Runner request created by the private dashboard.
-        required: true
-        type: string
+
 jobs:
-  windows:
+  build:
     runs-on: windows-latest
-    timeout-minutes: 360
+    
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Conectar ao Tailscale
-        uses: tailscale/github-action@v3
-        with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
+    - name: Conectar ao Tailscale
+      uses: tailscale/github-action@v3
+      with:
+        authkey: ${{ secrets.TS_AUTHKEY }}
+        args: --accept-routes
 
-      - name: Criar administrador Edson
-        shell: powershell
-        run: |
-          $username = "Edson"
-          $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+'
-          $password = -join (1..32 | ForEach-Object {
-            $alphabet[[System.Security.Cryptography.RandomNumberGenerator]::GetInt32($alphabet.Length)]
-          })
-          Write-Output "::add-mask::$password"
-          $securePassword = ConvertTo-SecureString `
-            -String $password `
-            -AsPlainText `
-            -Force
-          $runnerEnv = "RUNNER_USERNAME=$username`nRUNNER_PASSWORD=$password`n"
-          [System.IO.File]::AppendAllText($env:GITHUB_ENV, $runnerEnv, [System.Text.UTF8Encoding]::new($false))
-          $user = Get-LocalUser `
-            -Name $username `
-            -ErrorAction SilentlyContinue
+    - name: Instalar e Configurar AnyDesk
+      shell: powershell
+      run: |
+        Write-Host "Baixando AnyDesk..."
+        Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
+        
+        Write-Host "Instalando AnyDesk..."
+        Start-Process -FilePath "$env:TEMP\AnyDesk.exe" -ArgumentList "--install `"C:\Program Files (x86)\AnyDesk`" --silent" -Wait
+        
+        Write-Host "Configurando Acesso Nao Supervisionado..."
+        cmd.exe /c "echo SuaSenhaForte123! | `"C:\Program Files (x86)\AnyDesk\AnyDesk.exe`" --set-password"
+        
+        Restart-Service -Name "AnyDesk" -Force
+        Start-Sleep -Seconds 10
 
-          if ($null -eq $user) {
-              New-LocalUser `
-                -Name $username `
-                -Password $securePassword `
-                -PasswordNeverExpires `
-                -UserMayNotChangePassword:$false
-          }
-          else {
-              Set-LocalUser `
-                -Name $username `
-                -Password $securePassword
-          }
+    - name: Instalar Jogos e Aplicativos (Discord, Steam, Roblox)
+      shell: powershell
+      run: |
+        $ErrorActionPreference = 'SilentlyContinue'
 
-          # Administrador
-          Add-LocalGroupMember `
-            -Group "Administrators" `
-            -Member $username `
-            -ErrorAction SilentlyContinue
+        Write-Host "Instalando Discord..."
+        winget install --id Discord.Discord --silent --accept-source-agreements --accept-package-agreements
 
-          # Permitir RDP
-          Add-LocalGroupMember `
-            -Group "Remote Desktop Users" `
-            -Member $username `
-            -ErrorAction SilentlyContinue
+        Write-Host "Instalando Steam..."
+        winget install --id Valve.Steam --silent --accept-source-agreements --accept-package-agreements
 
-          Write-Host "Usuário criado: $username"
-          Write-Host "Usuário configurado como administrador."
+        Write-Host "Instalando Roblox Player..."
+        winget install --id Roblox.Roblox --silent --accept-source-agreements --accept-package-agreements
 
-      - name: Ativar RDP
-        shell: powershell
-        run: |
-          Set-ItemProperty `
-            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
-            -Name "fDenyTSConnections" `
-            -Value 0
+        Write-Host "Instalando Bloxstrap..."
+        winget install --id pizzaboxer.Bloxstrap --silent --accept-source-agreements --accept-package-agreements
 
-          Set-ItemProperty `
-            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
-            -Name "UserAuthentication" `
-            -Value 1
+        Write-Host "Instalações concluídas!"
 
-          Enable-NetFirewallRule `
-            -DisplayGroup "Remote Desktop"
+    - name: Configurar Senha do Windows e RDP
+      shell: powershell
+      run: |
+        $password = ConvertTo-SecureString "SuaSenhaForte123!" -AsPlainText -Force
+        Set-LocalUser -Name "runneradmin" -Password $password
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-          Restart-Service TermService -Force
-
-          Write-Host "RDP ativado."
-
-      - name: Enviar credenciais privadas ao painel
-        shell: powershell
-        env:
-          RUNNER_REQUEST_ID: ${{ inputs.request_id }}
-          RUNNER_CALLBACK_URL: ${{ secrets.RUNNER_CALLBACK_URL }}
-          RUNNER_CALLBACK_TOKEN: ${{ secrets.RUNNER_CALLBACK_TOKEN }}
-        run: |
-          Start-Sleep -Seconds 5
-          $ip = (tailscale ip -4 | Select-Object -First 1).Trim()
-          if ($ip -notmatch '^\d{1,3}(?:\.\d{1,3}){3}      - name: Manter computador ativo
-        shell: powershell
-        run: |
-          Write-Host "Runner ativo."
-          Start-Sleep -Seconds 21600
-) { throw "Tailscale did not return a valid IPv4 address." }
-          if ([string]::IsNullOrWhiteSpace($env:RUNNER_PASSWORD) -or [string]::IsNullOrWhiteSpace($env:RUNNER_USERNAME)) { throw "Runner credentials are unavailable." }
-          if ([string]::IsNullOrWhiteSpace($env:RUNNER_REQUEST_ID) -or [string]::IsNullOrWhiteSpace($env:RUNNER_CALLBACK_URL) -or [string]::IsNullOrWhiteSpace($env:RUNNER_CALLBACK_TOKEN)) { throw "The private callback configuration is missing." }
-          Write-Output "::add-mask::$env:RUNNER_PASSWORD"
-          Write-Output "::add-mask::$env:RUNNER_CALLBACK_TOKEN"
-          $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          $readyPayload = @{
-            requestId = $env:RUNNER_REQUEST_ID
-            status = "ready"
-            tailscaleIp = $ip
-            username = ".\$env:RUNNER_USERNAME"
-            password = $env:RUNNER_PASSWORD
-            runId = "$env:GITHUB_RUN_ID"
-            runUrl = $runUrl
-            error = $null
-          } | ConvertTo-Json -Compress
-          try {
-            Invoke-RestMethod -Uri $env:RUNNER_CALLBACK_URL -Method Post -Headers @{ Authorization = "Bearer $env:RUNNER_CALLBACK_TOKEN" } -ContentType "application/json" -Body $readyPayload -TimeoutSec 30 | Out-Null
-          } catch {
-            $failedPayload = @{
-              requestId = $env:RUNNER_REQUEST_ID
-              status = "failed"
-              tailscaleIp = $null
-              username = $null
-              password = $null
-              runId = "$env:GITHUB_RUN_ID"
-              runUrl = $runUrl
-              error = "The runner could not deliver its connection details."
-            } | ConvertTo-Json -Compress
-            try {
-              Invoke-RestMethod -Uri $env:RUNNER_CALLBACK_URL -Method Post -Headers @{ Authorization = "Bearer $env:RUNNER_CALLBACK_TOKEN" } -ContentType "application/json" -Body $failedPayload -TimeoutSec 15 | Out-Null
-            } catch { }
-            throw "Runner details could not be delivered to the private panel."
-          }
-          Write-Host "Connection details sent securely to the private panel."
-      - name: Manter computador ativo
-        shell: powershell
-        run: |
-          Write-Host "Runner ativo."
-          Start-Sleep -Seconds 21600
+    - name: Manter Runner Ativo
+      shell: powershell
+      run: |
+        Write-Host "Tudo pronto! Conecte via AnyDesk com a senha: SuaSenhaForte123!"
+        Start-Sleep -Seconds 21600
